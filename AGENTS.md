@@ -9,5 +9,6 @@
 - Preserve source timestamps and nulls; never generate fetched_at or freshness.
 - Every behavior change requires tests. Run pytest, ruff check, ruff format --check,
   and a real application startup smoke test.
-- S0-S1 is the baseline. The next authorized increment adds only HTTP control of
-  independent logistics/warehouse faults, as documented in README and the API contract.
+- S0-S1 is the baseline. Authorized increments add independent HTTP fault
+  controls and Support inquiry/reply reads for HTTP-only integration, as
+  documented in README and the API contract.

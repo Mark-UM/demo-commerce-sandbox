@@ -71,6 +71,20 @@ controls never aggregate sources, create business facts, or implement retries.
 
 ## Resolved differences from reference documents
 
+The next Support increment provides GET `/api/support/inquiries` with `limit`
+(1–100, default 50), `offset` (>=0, default 0), and optional nonempty `order_id`
+for an exact source reference match. Results are a bare array in inquiry-ID
+order, including S12. No matches or an offset past the end returns `[]`.
+Filtering occurs before pagination; no Product processing status is inferred.
+
+GET `/api/support/inquiries/{inquiry_id}/replies` uses the same limit/offset
+and returns accepted records in insertion order: `reply_id`, `status`, `sent_at`,
+`inquiry_id`, `text`, `idempotency_key`. Text is exact, retries return no duplicate
+rows, and results are isolated by inquiry. A known inquiry without replies
+returns `[]`; an unknown inquiry returns 404. Invalid pagination returns 422.
+History persists across restart and clears on reset. Existing POST receipts
+and single-inquiry schemas are unchanged.
+
 - This phase uses the requested `/api/...` paths, not the older `/.../v1` paths.
 - OMS lists parcels, then the Product retrieves each shipment and event list.
   There is no aggregate order context, HTTP 207, or cross-system partial envelope.

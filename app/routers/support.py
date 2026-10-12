@@ -1,14 +1,35 @@
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Query, Request
 
 from app.errors import SourceError, require, store
-from app.schemas import Inquiry, Receipt, ReplyCommand
+from app.schemas import AcceptedReply, Inquiry, Receipt, ReplyCommand
 
 router = APIRouter(prefix="/api/support", tags=["Support"])
+
+Limit = Annotated[int, Query(ge=1, le=100)]
+Offset = Annotated[int, Query(ge=0)]
+
+
+@router.get("/inquiries", response_model=list[Inquiry])
+def inquiries(
+    request: Request,
+    limit: Limit = 50,
+    offset: Offset = 0,
+    order_id: Annotated[str | None, Query(min_length=1)] = None,
+):
+    return store(request).list_inquiries(limit, offset, order_id)
 
 
 @router.get("/inquiries/{inquiry_id}", response_model=Inquiry)
 def inquiry(inquiry_id: str, request: Request):
     return require(request, "inquiries", inquiry_id, "INQUIRY_NOT_FOUND")
+
+
+@router.get("/inquiries/{inquiry_id}/replies", response_model=list[AcceptedReply])
+def replies(inquiry_id: str, request: Request, limit: Limit = 50, offset: Offset = 0):
+    require(request, "inquiries", inquiry_id, "INQUIRY_NOT_FOUND")
+    return store(request).list_replies(inquiry_id, limit, offset)
 
 
 @router.post("/inquiries/{inquiry_id}/replies", response_model=Receipt)

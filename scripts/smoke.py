@@ -87,7 +87,16 @@ def main():
                     print(scenario, result.status_code, result.json())
                 # A real source workflow: inquiry -> order -> parcels -> independent
                 # reads -> externally supplied reply -> idempotent retry.
-                inquiry = client.get("/api/support/inquiries/INQ-DEMO-004").json()
+                inquiry_list = client.get(
+                    "/api/support/inquiries", params={"order_id": "ORD-DEMO-004"}
+                )
+                assert inquiry_list.status_code == 200
+                assert len(inquiry_list.json()) == 1
+                inquiry = inquiry_list.json()[0]
+                assert (
+                    client.get(f"/api/support/inquiries/{inquiry['inquiry_id']}").json()
+                    == inquiry
+                )
                 order_id = inquiry["order_id"]
                 assert client.get(f"/api/oms/orders/{order_id}").status_code == 200
                 parcels = client.get(f"/api/oms/orders/{order_id}/parcels").json()
@@ -117,6 +126,11 @@ def main():
                 receipt = client.post(reply_path, json=command)
                 assert receipt.status_code == 200
                 assert client.post(reply_path, json=command).json() == receipt.json()
+                history = client.get(reply_path)
+                assert history.status_code == 200
+                assert history.json() == [
+                    {**receipt.json(), **command, "inquiry_id": inquiry["inquiry_id"]}
+                ]
                 assert (
                     client.put(
                         control, json={"mode": "SLOW_RESPONSE", "delay_ms": 500}

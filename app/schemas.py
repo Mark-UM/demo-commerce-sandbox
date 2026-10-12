@@ -82,6 +82,12 @@ class Receipt(SourceModel):
     sent_at: datetime
 
 
+class AcceptedReply(Receipt):
+    inquiry_id: Identifier
+    text: str
+    idempotency_key: Identifier
+
+
 class ErrorDetail(SourceModel):
     code: str
     message: str

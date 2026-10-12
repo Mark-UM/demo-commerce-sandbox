@@ -68,6 +68,33 @@ class Store:
             ).fetchall()
         return [json.loads(row[0]) for row in rows]
 
+    def list_inquiries(self, limit: int, offset: int, order_id: str | None):
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT payload FROM records WHERE collection='inquiries' "
+                "AND (? IS NULL OR json_extract(payload, '$.order_id')=?) "
+                "ORDER BY lookup_key LIMIT ? OFFSET ?",
+                (order_id, order_id, limit, offset),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
+    def list_replies(self, inquiry_id: str, limit: int, offset: int):
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT text, idempotency_key, receipt FROM replies WHERE inquiry_id=? "
+                "ORDER BY rowid LIMIT ? OFFSET ?",
+                (inquiry_id, limit, offset),
+            ).fetchall()
+        return [
+            {
+                **json.loads(receipt),
+                "inquiry_id": inquiry_id,
+                "text": text,
+                "idempotency_key": key,
+            }
+            for text, key, receipt in rows
+        ]
+
     def reply(self, inquiry_id: str, command: ReplyCommand):
         # Serialize the lookup and insert across threads/processes, not just requests.
         with self.connect() as db:

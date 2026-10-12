@@ -8,7 +8,8 @@ The Product must use HTTP; it must not import this code or access this database.
 One FastAPI service represents OMS, Logistics, Warehouse, and Support through
 separate routers. SQLite persists seed records and accepted simulated replies.
 No AI, UI, authentication, real providers, SaaS, or cross-system aggregation is included.
-S0-S1 is the baseline; the next core increment adds independent HTTP fault controls.
+S0-S1 is the baseline; core increments add independent HTTP fault controls and
+Support discovery/history for integration entirely over HTTP.
 
 ## Start independently
 
@@ -35,7 +36,9 @@ is not loaded automatically. No other services or accounts are required.
 | GET | `/api/logistics/shipments/{tracking_number}` | Source shipment status |
 | GET | `/api/logistics/shipments/{tracking_number}/events` | Source tracking events |
 | GET | `/api/warehouse/orders/{order_id}/notes` | Original free-text notes |
+| GET | `/api/support/inquiries` | Discover inquiries with pagination/order filter |
 | GET | `/api/support/inquiries/{inquiry_id}` | Customer inquiry |
+| GET | `/api/support/inquiries/{inquiry_id}/replies` | Inspect accepted reply history |
 | POST | `/api/support/inquiries/{inquiry_id}/replies` | Record simulated reply |
 | GET | `/api/admin/scenarios` | List explicit fault overrides |
 | PUT | `/api/admin/scenarios/{system}/{record_id}` | Set or replace a fault override |
@@ -45,6 +48,17 @@ Reply body: `{"text":"Your parcel is in transit.","idempotency_key":"reviewed-re
 Success is HTTP 200 with `reply_id`, `status: SENT`, and `sent_at`. SENT records
 acceptance in this fake system; no real message is delivered. Reusing the same
 inquiry/key and exact text returns the original receipt; different text gives 409.
+
+Inquiry discovery returns an array ordered by inquiry ID. Use `limit` (1–100,
+default 50), `offset` (nonnegative, default 0), and optional `order_id` for exact
+matching; continue paging until an empty page. S12's inquiry remains discoverable
+even though its order is absent. A filter with no matches returns `[]`.
+
+Reply history accepts the same pagination parameters and returns an array in
+acceptance order with `reply_id`, `inquiry_id`, exact `text`, `idempotency_key`,
+`status` and `sent_at`. Retries do not add entries. An existing inquiry with no
+replies returns `[]`; an unknown inquiry returns 404. These are source records,
+not Product case states. Restart preserves history and reset removes it.
 
 ## Deterministic reset
 
@@ -102,7 +116,8 @@ uv run python scripts/smoke.py
 
 The smoke script starts a separate Uvicorn process with a temporary SQLite file,
 uses real HTTP for health and S02/S04/S06/S08/S09/S12, then verifies the inquiry,
-order, parcel, shipment, warehouse and reply workflow with retry recovery and a
+order, parcel, shipment, warehouse and reply workflow, including discovery and
+accepted reply lookup, with retry recovery and a
 real client read timeout. It stops the process afterward.
 Run `uv run python scripts/smoke.py --base-time 2026-10-13T06:00:00Z` to also
 verify custom reset timestamps for normal and stale logistics over real HTTP.
