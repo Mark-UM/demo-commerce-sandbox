@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Identifier = Annotated[str, Field(min_length=1)]
 
@@ -90,3 +90,31 @@ class ErrorDetail(SourceModel):
 
 class ErrorResponse(SourceModel):
     error: ErrorDetail
+
+
+FaultSystem = Literal["logistics", "warehouse"]
+FaultMode = Literal[
+    "NORMAL",
+    "TIMEOUT_ONCE",
+    "ALWAYS_TIMEOUT",
+    "HTTP_500",
+    "HTTP_429",
+    "SLOW_RESPONSE",
+]
+
+
+class FaultCommand(SourceModel):
+    mode: FaultMode
+    delay_ms: Annotated[int, Field(strict=True, ge=0, le=10000)] = 0
+
+    @model_validator(mode="after")
+    def validate_delay(self):
+        if (self.mode == "SLOW_RESPONSE") != (self.delay_ms > 0):
+            raise ValueError("Positive delay_ms is required only for SLOW_RESPONSE")
+        return self
+
+
+class FaultState(FaultCommand):
+    system: FaultSystem
+    record_id: Identifier
+    remaining_failures: int | None

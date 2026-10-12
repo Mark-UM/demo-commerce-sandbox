@@ -24,7 +24,10 @@ Product adapters map `order_id` to `external_order_id`, `updated_at` to
 `source_updated_at`, and warehouse `text` to `note_text`. They assign their own
 `fetched_at`. The Sandbox never supplies freshness or canonical snapshots.
 Source timestamps use UTC ISO 8601 with Z; unknown timestamps are null.
-Seed data never changes with wall-clock time. See README for the reference clock.
+Seed data never changes with wall-clock time. The reset CLI accepts an explicit
+UTC `--base-time`; the default remains 2026-09-20T06:00:00Z. All known timestamps
+shift together, nulls remain null, and restarts preserve the stored data.
+See README for the reference clock and reset semantics.
 
 POST reply takes `text` and `idempotency_key` in JSON, with inquiry ID in the path.
 Blank values and unknown fields produce 422. Text is preserved exactly, including
@@ -38,9 +41,33 @@ Errors use `{"error":{"code":"...","message":"...","request_id":"..."}}`.
 An optional `X-Request-Id` is echoed in the response header and error object;
 otherwise the service generates one. Missing records are 404, validation is 422,
 S08 logistics is 504, and S09 warehouse is 503. Failure injection is centralized
-in `app/scenarios.py`; future delay, transient failures, rate limits, or malformed
-responses can extend that boundary. They are not implemented now. S08 is an
-immediate simulated upstream 504, not an intentional client-side socket timeout.
+in `app/scenarios.py`. S08 is an immediate simulated upstream 504, not an
+intentional client-side socket timeout.
+
+## Core increment: independent fault controls
+
+GET `/api/admin/scenarios` lists explicit overrides. PUT
+`/api/admin/scenarios/{system}/{record_id}` accepts `mode` and optional
+`delay_ms` (default 0). Supported systems are logistics (tracking number) and
+warehouse (order ID); nonexistent targets return 404. Modes are NORMAL,
+TIMEOUT_ONCE, ALWAYS_TIMEOUT, HTTP_500, HTTP_429 and SLOW_RESPONSE.
+SLOW_RESPONSE requires delay_ms from 1 to 10000; other modes require 0.
+Unknown fields, invalid systems/modes and invalid delays return 422.
+
+PUT returns `system`, `record_id`, `mode`, `delay_ms`, `remaining_failures`.
+Remaining failures is 1 then 0 for TIMEOUT_ONCE, otherwise null. One-shot
+consumption is atomic and shared by a tracking number's detail and events
+requests. Subsequent reads use unchanged source data, even for S08/S09.
+HTTP_429 returns the structured RATE_LIMITED error and Retry-After: 1;
+HTTP_500 uses SCENARIO_FORCED_FAILURE. Both timeout modes produce 504 with
+the source's TEMPORARILY_UNAVAILABLE error. SLOW_RESPONSE lets the caller's
+own timeout expire and does not hold a SQLite lock or block the async event loop.
+
+Rules and consumed budgets persist across service restarts. PUT replaces a rule
+and resets its budget. DELETE on the same path returns 204, including when no
+override exists, and restores the golden default. NORMAL suppresses default
+faults. Reset clears overrides. GET reports only explicit overrides. These
+controls never aggregate sources, create business facts, or implement retries.
 
 ## Resolved differences from reference documents
 
@@ -49,7 +76,9 @@ immediate simulated upstream 504, not an intentional client-side socket timeout.
   There is no aggregate order context, HTTP 207, or cross-system partial envelope.
 - The current 12 scenario definitions replace the plan's older scenario mapping.
 - S12 has an inquiry but deliberately no order; only 11 order records exist.
-- Fixed timestamps replace reset-time timestamps for exact reproducibility.
+- An explicit fixed reference time replaces implicit current reset time for
+  exact reproducibility. The default reproduces the original source records.
 - No fetched_at is fabricated; null updates remain unknown.
-- No API key, policy API, admin API, random records, or additional fault modes
-  are introduced in S0-S1. Reset is a local CLI operation with the service stopped.
+- S0-S1 introduced no API key, policy API, admin API, or random records. The next
+  authorized core increment adds only the fault controls above. Reset remains
+  a local CLI operation with the service stopped.

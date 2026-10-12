@@ -21,8 +21,10 @@ SCENARIOS = {
 }
 
 
-def records():
+def records(base_time: datetime = BASE_TIME):
     """Yield (source collection, lookup key, validated payload)."""
+    if base_time.tzinfo is None or base_time.utcoffset() != timedelta(0):
+        raise ValueError("Seed base time must be timezone-aware UTC")
     for n in range(1, 13):
         order_id = f"ORD-DEMO-{n:03}"
         inquiry_id = f"INQ-DEMO-{n:03}"
@@ -33,7 +35,7 @@ def records():
                 inquiry_id=inquiry_id,
                 order_id=order_id,
                 customer_message=f"What is the status of my order {order_id}?",
-                created_at=BASE_TIME,
+                created_at=base_time,
             ),
         )
         if n == 12:
@@ -59,8 +61,8 @@ def records():
                     if n == 4
                     else []
                 ),
-                created_at=BASE_TIME - timedelta(days=5),
-                updated_at=BASE_TIME - timedelta(minutes=30),
+                created_at=base_time - timedelta(days=5),
+                updated_at=base_time - timedelta(minutes=30),
             ),
         )
         note_text = {
@@ -77,8 +79,8 @@ def records():
                 note_id=f"NOTE-DEMO-{n:03}",
                 order_id=order_id,
                 text=note_text,
-                created_at=BASE_TIME - timedelta(minutes=20),
-                updated_at=None if n == 5 else BASE_TIME - timedelta(minutes=20),
+                created_at=base_time - timedelta(minutes=20),
+                updated_at=None if n == 5 else base_time - timedelta(minutes=20),
             ),
         )
         if n in (1, 5):
@@ -108,7 +110,7 @@ def records():
                 if n == 11
                 else "IN_TRANSIT"
             )
-            updated = BASE_TIME - (
+            updated = base_time - (
                 timedelta(hours=72) if n == 7 else timedelta(minutes=10)
             )
             yield (

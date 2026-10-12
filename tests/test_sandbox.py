@@ -208,7 +208,7 @@ def test_reset_persistence_and_timestamps(client):
 
 def test_openapi_contract(client):
     document = client.get("/openapi.json").json()
-    assert len(document["paths"]) == 8
+    assert len(document["paths"]) == 10
     assert "fetched_at" not in str(document)
     order = client.get("/api/oms/orders/ORD-DEMO-002").json()
     assert set(order) == {

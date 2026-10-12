@@ -1,7 +1,10 @@
 # Golden scenarios
 
 Every ID and source record is deterministic. Reference time T0 is
-`2026-09-20T06:00:00Z`. Orders are created T0 minus 5 days and updated T0 minus
+`2026-09-20T06:00:00Z` by default; reset can explicitly select another UTC T0
+using `--base-time` (see README). All absolute dates below describe the default
+fixture; relative offsets and source IDs hold for every selected T0.
+Orders are created T0 minus 5 days and updated T0 minus
 30 minutes. Notes are created T0 minus 20 minutes. Shipment updates are T0 minus
 10 minutes except S07 (minus 72 hours). Event occurrence times are at or before
 the corresponding shipment update; event update timestamps are unknown/null.
@@ -28,7 +31,12 @@ one travel mug; S04 also contains a canvas bag. All data is fictional.
 | S11 | ORD-DEMO-011 | PAR-DEMO-011-1 / TRK-DEMO-011-1 | Warehouse says not handed to carrier today; logistics says PICKED_UP | All reads 200; conflicting records both preserved |
 | S12 | ORD-DEMO-012 (absent) | None | Inquiry references nonexistent order | Order, parcels, warehouse notes 404; inquiry 200 |
 
+The table describes golden defaults. Explicit HTTP fault overrides can change
+one logistics or warehouse record's request behavior without modifying its
+source data; see README. Clearing an override restores the table's behavior.
+
 Unlisted/missing tracking and inquiry IDs return 404. Reply submission remains
 available for each existing inquiry, including S12. Read data and simulated
-failures remain unchanged after restart/reset; reset removes accepted replies.
+failures remain unchanged after reset; reset removes accepted replies and fault
+overrides. Restarts preserve source data, replies, overrides and consumed budgets.
 These scenarios specify source behavior only, never what the AI should answer.

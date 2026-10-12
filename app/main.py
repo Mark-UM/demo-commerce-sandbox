@@ -9,7 +9,7 @@ from starlette.exceptions import HTTPException
 
 from app.database import Store
 from app.errors import SourceError
-from app.routers import logistics, oms, support, warehouse
+from app.routers import admin, logistics, oms, support, warehouse
 from app.schemas import ErrorResponse
 
 
@@ -31,9 +31,10 @@ def create_app(db_path: str | None = None) -> FastAPI:
         response.headers["X-Request-Id"] = request.state.request_id
         return response
 
-    def error_response(request, status, code, message):
+    def error_response(request, status, code, message, headers=None):
         return JSONResponse(
             status_code=status,
+            headers=headers,
             content={
                 "error": {
                     "code": code,
@@ -45,7 +46,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.exception_handler(SourceError)
     async def source_error(request: Request, exc: SourceError):
-        return error_response(request, exc.status, exc.code, exc.message)
+        return error_response(request, exc.status, exc.code, exc.message, exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, exc: RequestValidationError):
@@ -63,11 +64,18 @@ def create_app(db_path: str | None = None) -> FastAPI:
             version = db.execute("SELECT version FROM metadata").fetchone()[0]
         return {"status": "ok", "database": "ok", "seed_version": version}
 
-    for router in (oms.router, logistics.router, warehouse.router, support.router):
+    for router in (
+        oms.router,
+        logistics.router,
+        warehouse.router,
+        support.router,
+        admin.router,
+    ):
         app.include_router(
             router,
             responses={
-                status: {"model": ErrorResponse} for status in (404, 409, 422, 503, 504)
+                status: {"model": ErrorResponse}
+                for status in (404, 409, 422, 429, 500, 503, 504)
             },
         )
     return app

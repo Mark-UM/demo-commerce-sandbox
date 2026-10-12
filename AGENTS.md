@@ -9,4 +9,5 @@
 - Preserve source timestamps and nulls; never generate fetched_at or freshness.
 - Every behavior change requires tests. Run pytest, ruff check, ruff format --check,
   and a real application startup smoke test.
-- Current scope is S0-S1 as documented in README and docs/api-contract.md.
+- S0-S1 is the baseline. The next authorized increment adds only HTTP control of
+  independent logistics/warehouse faults, as documented in README and the API contract.
