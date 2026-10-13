@@ -108,3 +108,24 @@ test('uncertain conversation write retries reuse a key; new submissions get a ne
   await context.command('thread', '/messages', {text: 'hello'});
   assert.notEqual(payloads[1].idempotency_key, payloads[2].idempotency_key);
 });
+test('view switching sets accessible navigation and respects reduced-motion scrolling', () => {
+  const views = ['sources', 'support', 'faults', 'simulation'].map(name => ({id: `view-${name}`}));
+  const nav = views.map(view => ({
+    dataset: {view: view.id.slice(5)}, attributes: {},
+    classList: {toggle() {}}, setAttribute(name, value) { this.attributes[name] = value; },
+  }));
+  const title = {}, scrolls = []; let reduced = false;
+  const context = vm.createContext({
+    document: {querySelectorAll: selector => selector === '.view' ? views : nav},
+    $: () => title, connected: false,
+    window: {scrollTo: value => scrolls.push(value), matchMedia: () => ({matches: reduced})},
+  });
+  vm.runInContext(fragment('function view(', 'document.querySelectorAll(".nav").forEach(button'), context);
+  context.view('support');
+  assert.equal(title.textContent, '客户会话');
+  assert.deepEqual(views.map(view => view.hidden), [true, false, true, true]);
+  assert.deepEqual(nav.map(item => item.attributes['aria-pressed']), ['false', 'true', 'false', 'false']);
+  assert.equal(scrolls[0].behavior, 'smooth');
+  reduced = true; context.view('sources');
+  assert.equal(scrolls[1].behavior, 'auto');
+});

@@ -42,10 +42,14 @@ async function api(path, method = "GET", body) {
 function jsonView(target, data) { target.replaceChildren(node("pre", JSON.stringify(data, null, 2))); }
 function view(name) {
   document.querySelectorAll(".view").forEach(el => { el.hidden = el.id !== `view-${name}`; });
-  document.querySelectorAll(".nav").forEach(el => el.classList.toggle("active", el.dataset.view === name));
+  document.querySelectorAll(".nav").forEach(el => {
+    el.classList.toggle("active", el.dataset.view === name);
+    el.setAttribute("aria-pressed", String(el.dataset.view === name));
+  });
   $("#page-title").textContent = {sources: "场景与源数据", support: "客户会话", faults: "故障控制", simulation: "模拟数据推进"}[name];
   if (connected && name === "support") loadInquiries();
   if (connected && name === "faults") loadFaults();
+  window.scrollTo({top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
 }
 document.querySelectorAll(".nav").forEach(button => button.addEventListener("click", () => view(button.dataset.view)));
 async function runForm(form, action) {
@@ -98,14 +102,17 @@ async function refreshAfterWrite() {
 }
 async function connect() {
   notice(); apiKey = $("#api-key").value; connected = false; syncSendButton();
+  $("#connection").textContent = "连接中…"; $("#connection").dataset.state = "pending";
   try {
     await refreshSummary(); connected = true;
     $("#connection").textContent = "● 已连接";
+    $("#connection").dataset.state = "connected";
     await Promise.all([inspect(), loadPolicy(), loadFaults(), loadInquiries()]);
     if (currentInquiry) await openInquiry(currentInquiry.inquiry_id);
     if ($("#customer-orders").childElementCount) await loadCustomerOrders();
   } catch (error) {
     connected = false; $("#connection").textContent = "连接失败"; notice(errorText(error));
+    $("#connection").dataset.state = "error";
   }
   syncSendButton();
 }

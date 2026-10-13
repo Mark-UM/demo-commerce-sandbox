@@ -27,7 +27,7 @@ HTTP authority.
 
 ## Verification on 2026-10-13
 
-- Python 3.13: 125 tests passed. Two third-party deprecation warnings remain.
+- Python 3.13: 126 tests passed. Two third-party deprecation warnings remain.
 - Ruff lint and format checks passed; diff whitespace check passed.
 - Real Uvicorn HTTP smoke passed, including normal/golden failures, authentication,
   Policy, complete inventory, source reads, reply deduplication, actual client
@@ -89,6 +89,11 @@ branches, current/fixed-clock reset and long IDs. It found and fixed stale parce
 retry panels, scenario highlighting, history-loading status and current-thread
 refresh. Four dependency-free JavaScript regression tests also pass. See
 `docs/console-acceptance.md` for the coverage and reproduction commands.
+The visual update adds locally generated responsive WebP artwork (75,550-byte
+desktop and 22,072-byte mobile assets), consistent icons, short view transitions
+and reduced-motion support. Five JavaScript regression tests now pass. Browser
+checks confirmed both image sources load, all four mobile layouts fit, and source
+failures/replies still behave correctly. See `docs/visual-design.md`.
 
 Existing databases are never silently reseeded; explicit reset upgrades to
 `sandbox-v2` and intentionally clears the previous run. Finish previous-run

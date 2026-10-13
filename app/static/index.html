@@ -3,22 +3,32 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DemoCommerce · Sandbox 控制台</title>
+  <meta name="theme-color" content="#173c31">
+  <link rel="preload" as="image" href="/static/images/commerce-atmosphere.webp" media="(min-width: 761px)">
+  <link rel="preload" as="image" href="/static/images/commerce-atmosphere-small.webp" media="(max-width: 760px)">
   <link rel="stylesheet" href="/static/console.css">
   <script src="/static/console.js" defer></script>
 </head>
 <body>
 <aside class="sidebar">
-  <a class="brand" href="/">D<span>DemoCommerce<small>EXTERNAL SYSTEM SANDBOX</small></span></a>
+  <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3 9 5v8l-9 5-9-5V8zM3 8l9 5 9-5M12 13v8M7.5 5.5l9 5"/></svg></span><span>DemoCommerce<small>EXTERNAL SYSTEM SANDBOX</small></span></a>
   <nav aria-label="主导航">
-    <button class="nav active" data-view="sources">◈ <span>场景与源数据</span></button>
-    <button class="nav" data-view="support">▤ <span>客户会话</span></button>
-    <button class="nav" data-view="faults">⌁ <span>故障控制</span></button>
-    <button class="nav" data-view="simulation">↗ <span>模拟数据推进</span></button>
+    <button class="nav active" data-view="sources" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5v8l-9 5-9-5V8zM3 8l9 5 9-5M12 13v8"/></svg><span>场景与源数据</span></button>
+    <button class="nav" data-view="support" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-9l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M7 9h10M7 13h7"/></svg><span>客户会话</span></button>
+    <button class="nav" data-view="faults" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg><span>故障控制</span></button>
+    <button class="nav" data-view="simulation" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 6-6 4 4 8-10M15 5h6v6"/></svg><span>模拟数据推进</span></button>
   </nav>
   <div class="sidebar-bottom"><span class="pill">TEST ENVIRONMENT</span><p>独立来源 · 真实 HTTP 行为<br>所有数据与回复均为模拟</p><a href="/docs" target="_blank" rel="noopener">打开 API 文档 ↗</a></div>
 </aside>
 <main>
-  <header><div><span class="eyebrow">WORKSPACE / SANDBOX</span><h1 id="page-title">场景与源数据</h1></div><span id="connection" class="pill">未连接</span></header>
+  <header class="hero">
+    <picture class="hero-art" aria-hidden="true">
+      <source media="(max-width: 760px)" srcset="/static/images/commerce-atmosphere-small.webp">
+      <img src="/static/images/commerce-atmosphere.webp" width="1920" height="640" alt="" decoding="async" fetchpriority="high">
+    </picture>
+    <div class="hero-copy"><span class="eyebrow">DEMO COMMERCE / EXTERNAL SYSTEMS</span><h1 id="page-title">场景与源数据</h1><p>模拟真实电商来源，验证每一次独立响应。</p><div class="hero-tags" aria-label="模拟来源"><span>OMS</span><span>LOGISTICS</span><span>WAREHOUSE</span><span>SUPPORT</span></div></div>
+    <span id="connection" class="pill" data-state="pending" role="status" aria-live="polite">连接中…</span>
+  </header>
   <section class="connection panel"><form id="connect-form"><label>API Key<input id="api-key" type="password" value="demo-commerce-key" autocomplete="off" aria-label="API Key"></label><button type="submit">连接 / 刷新</button></form><p>使用本服务的 HTTP 接口。密钥仅保存在当前页面内存中。</p></section>
   <div id="notice" role="status" aria-live="polite" hidden></div>
   <section id="metrics" class="metrics" aria-label="环境统计"></section>
