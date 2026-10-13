@@ -10,5 +10,5 @@
 - Every behavior change requires tests. Run pytest, ruff check, ruff format --check,
   and a real application startup smoke test.
 - S0-S1 is the baseline. Authorized increments add independent HTTP fault
-  controls and Support inquiry/reply reads for HTTP-only integration, as
+  controls, HTTP reset and Support inquiry/reply reads for HTTP-only integration, as
   documented in README and the API contract.

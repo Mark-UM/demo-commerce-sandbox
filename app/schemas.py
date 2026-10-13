@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -86,6 +86,35 @@ class AcceptedReply(Receipt):
     inquiry_id: Identifier
     text: str
     idempotency_key: Identifier
+
+
+class ResetCommand(SourceModel):
+    base_time: datetime | None = None
+
+    @field_validator("base_time", mode="before")
+    @classmethod
+    def timestamp_string(cls, value):
+        if value is not None and not isinstance(value, str):
+            raise ValueError("Use an ISO 8601 UTC timestamp string")
+        return value
+
+    @field_validator("base_time")
+    @classmethod
+    def utc_reference(cls, value):
+        if value is not None:
+            if value.tzinfo is None or value.utcoffset() != timedelta(0):
+                raise ValueError("Seed reference time must be timezone-aware UTC")
+            try:
+                value - timedelta(days=5)
+            except OverflowError as error:
+                raise ValueError("Seed reference time is out of range") from error
+        return value
+
+
+class ResetResult(SourceModel):
+    status: Literal["RESET"]
+    seed_version: Literal["s0-s1-v1"]
+    base_time: datetime
 
 
 class ErrorDetail(SourceModel):

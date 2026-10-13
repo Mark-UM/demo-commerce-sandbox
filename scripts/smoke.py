@@ -141,12 +141,43 @@ def main():
                     client.get(first, timeout=0.05)
                 except httpx.ReadTimeout:
                     print("Core workflow: real client read timeout confirmed")
+                    # The client timed out, but the delayed server request still
+                    # finishes. Drain it before starting a new run with reset.
+                    time.sleep(0.5)
                 else:
                     raise AssertionError("Slow response did not trigger client timeout")
                 assert client.get("/health").status_code == 200
                 assert client.delete(control).status_code == 204
                 assert client.get(first).status_code == 200
                 print("Core workflow: reads, fault recovery and reply retry passed")
+                # Reset the running environment entirely over HTTP.
+                golden_control = "/api/admin/scenarios/logistics/TRK-DEMO-008-1"
+                assert (
+                    client.put(golden_control, json={"mode": "NORMAL"}).status_code
+                    == 200
+                )
+                reset_body = {"base_time": args.base_time} if args.base_time else {}
+                restored = client.post("/api/admin/reset", json=reset_body)
+                assert restored.status_code == 200
+                assert restored.json()["status"] == "RESET"
+                assert client.get("/api/admin/scenarios").json() == []
+                assert client.get(reply_path).json() == []
+                assert (
+                    client.get("/api/logistics/shipments/TRK-DEMO-008-1").status_code
+                    == 504
+                )
+                assert (
+                    client.get("/api/warehouse/orders/ORD-DEMO-009/notes").status_code
+                    == 503
+                )
+                assert client.get(first).status_code == 200
+                after_reset = client.post(reply_path, json=command)
+                assert after_reset.status_code == 200
+                assert after_reset.json()["reply_id"] != receipt.json()["reply_id"]
+                assert (
+                    client.post(reply_path, json=command).json() == after_reset.json()
+                )
+                print("Reset workflow: defaults restored and new reply run verified")
         finally:
             process.terminate()
             try:

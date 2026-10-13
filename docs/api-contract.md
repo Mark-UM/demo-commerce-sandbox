@@ -71,6 +71,18 @@ controls never aggregate sources, create business facts, or implement retries.
 
 ## Resolved differences from reference documents
 
+POST `/api/admin/reset` takes an explicit JSON object. `{}` or
+`{"base_time":null}` selects the default T0; a `base_time` string selects an
+ISO 8601 UTC reference (Z or +00:00). Naive/non-UTC timestamps, timestamps too
+early for the five-day seed offset, numeric timestamps and unknown fields are
+422. The response has `status: RESET`, `seed_version: s0-s1-v1`, and the chosen
+UTC `base_time`. Source records, reply/deduplication history, and fault overrides
+are reset in one transaction; validation or transaction failure preserves the
+previous run. The service remains running. Finish old requests before reset,
+since the endpoint does not cancel in-flight work. Default S08/S09 failures
+return afterward, while accepted replies start empty. The same reply key can
+then create a new receipt. The CLI remains an offline alternative.
+
 The next Support increment provides GET `/api/support/inquiries` with `limit`
 (1–100, default 50), `offset` (>=0, default 0), and optional nonempty `order_id`
 for an exact source reference match. Results are a bare array in inquiry-ID
@@ -94,5 +106,5 @@ and single-inquiry schemas are unchanged.
   exact reproducibility. The default reproduces the original source records.
 - No fetched_at is fabricated; null updates remain unknown.
 - S0-S1 introduced no API key, policy API, admin API, or random records. The next
-  authorized core increment adds only the fault controls above. Reset remains
-  a local CLI operation with the service stopped.
+  authorized core increments add fault controls, Support source reads and HTTP
+  reset. Offline CLI reset is still available with the service stopped.

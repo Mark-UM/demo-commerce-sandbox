@@ -43,6 +43,7 @@ is not loaded automatically. No other services or accounts are required.
 | GET | `/api/admin/scenarios` | List explicit fault overrides |
 | PUT | `/api/admin/scenarios/{system}/{record_id}` | Set or replace a fault override |
 | DELETE | `/api/admin/scenarios/{system}/{record_id}` | Restore golden behavior |
+| POST | `/api/admin/reset` | Restore deterministic data and start a new test run |
 
 Reply body: `{"text":"Your parcel is in transit.","idempotency_key":"reviewed-reply-1"}`.
 Success is HTTP 200 with `reply_id`, `status: SENT`, and `sent_at`. SENT records
@@ -61,6 +62,18 @@ replies returns `[]`; an unknown inquiry returns 404. These are source records,
 not Product case states. Restart preserves history and reset removes it.
 
 ## Deterministic reset
+
+For an HTTP-only test run, keep the service running and POST `/api/admin/reset`
+with `{}` to restore the default seed, or
+`{"base_time":"2026-10-13T06:00:00Z"}` to choose an explicit UTC reference.
+The response is `{"status":"RESET","seed_version":"s0-s1-v1","base_time":"..."}`.
+Reset atomically replaces source data, clears replies/deduplication history and
+fault overrides, and restores the golden S08/S09 failures. Invalid payloads
+return 422 without changing data. A failed reset rolls back the whole transaction.
+Finish all previous-run requests before reset; in-flight requests are not
+cancelled. Reusing an old reply key afterward creates a reply in the new run.
+
+The offline CLI remains available:
 
 Stop the service, then run:
 
@@ -119,6 +132,8 @@ uses real HTTP for health and S02/S04/S06/S08/S09/S12, then verifies the inquiry
 order, parcel, shipment, warehouse and reply workflow, including discovery and
 accepted reply lookup, with retry recovery and a
 real client read timeout. It stops the process afterward.
+It also resets the running service over HTTP, confirms cleared history and
+restored faults, then submits and retries a reply in the new run.
 Run `uv run python scripts/smoke.py --base-time 2026-10-13T06:00:00Z` to also
 verify custom reset timestamps for normal and stale logistics over real HTTP.
 Tests cover scenario contents, timestamps, independent faults, missing records,
