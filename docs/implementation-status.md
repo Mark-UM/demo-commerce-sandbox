@@ -83,6 +83,12 @@ Confirmed reset restores the baseline inventory; an invalid console API Key
 returns a visible 403. Customer lookup and mobile layouts were checked in the
 browser; source, conversation and simulation views have no horizontal overflow
 at the 390-pixel viewport. No browser script errors were recorded.
+The complete follow-up browser audit recorded 169 successful assertions covering
+every visible console feature, all 22 system/fault-mode combinations, form error
+branches, current/fixed-clock reset and long IDs. It found and fixed stale parcel
+retry panels, scenario highlighting, history-loading status and current-thread
+refresh. Four dependency-free JavaScript regression tests also pass. See
+`docs/console-acceptance.md` for the coverage and reproduction commands.
 
 Existing databases are never silently reseeded; explicit reset upgrades to
 `sandbox-v2` and intentionally clears the previous run. Finish previous-run

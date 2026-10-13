@@ -16,10 +16,11 @@ const faultModes = {
   NORMAL: "正常响应，覆盖场景原有故障。", TIMEOUT_ONCE: "下一次物流 / 仓库读取超时；之后恢复。物流状态与事件共享次数。",
   ALWAYS_TIMEOUT: "持续返回 HTTP 504。", HTTP_500: "来源返回 HTTP 500。", HTTP_429: "来源返回 HTTP 429 限流。",
   SLOW_RESPONSE: "延迟后响应；输入 1–10000 毫秒。", STALE_DATA: "返回旧的来源时间。", EMPTY_RESULT: "返回来源定义的空结果。",
-  PARTIAL_FAILURE: "物流状态与事件表现不同，或仓库读取失败。", CONFLICTING_DATA: "返回互相冲突的来源事实。", MALFORMED_RESPONSE: "返回 HTTP 200，但响应不是有效 JSON。"
+  PARTIAL_FAILURE: "此来源记录返回 HTTP 503，其他记录与系统保持独立。", CONFLICTING_DATA: "返回互相冲突的来源事实。", MALFORMED_RESPONSE: "返回 HTTP 200，但响应不是有效 JSON。"
 };
 function notice(text = "") { $("#notice").textContent = text; $("#notice").hidden = !text; }
 function errorText(error) { return `${error.status ? `HTTP ${error.status} · ` : ""}${error.message}${error.requestId ? ` · 请求 ${error.requestId}` : ""}`; }
+function syncSendButton() { $("#send-button").disabled = !connected || !currentInquiry || Boolean($("#send-message").dataset.busy); }
 async function api(path, method = "GET", body) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
@@ -62,7 +63,7 @@ async function runForm(form, action) {
   } finally {
     delete form.dataset.busy;
     buttons.forEach(button => { button.disabled = false; });
-    $("#send-button").disabled = !currentInquiry;
+    syncSendButton();
   }
 }
 function success(form, text) { const el = $(".operation-result", form); if (el) { el.textContent = text; el.className = "operation-result success"; } }
@@ -96,14 +97,17 @@ async function refreshAfterWrite() {
   catch (error) { notice(`写入已接受，但统计刷新失败：${errorText(error)}`); }
 }
 async function connect() {
-  notice(); apiKey = $("#api-key").value;
+  notice(); apiKey = $("#api-key").value; connected = false; syncSendButton();
   try {
     await refreshSummary(); connected = true;
     $("#connection").textContent = "● 已连接";
     await Promise.all([inspect(), loadPolicy(), loadFaults(), loadInquiries()]);
+    if (currentInquiry) await openInquiry(currentInquiry.inquiry_id);
+    if ($("#customer-orders").childElementCount) await loadCustomerOrders();
   } catch (error) {
     connected = false; $("#connection").textContent = "连接失败"; notice(errorText(error));
   }
+  syncSendButton();
 }
 $("#connect-form").addEventListener("submit", event => { event.preventDefault(); runForm(event.currentTarget, connect); });
 scenarioLabels.forEach((label, index) => {
@@ -119,8 +123,8 @@ scenarioLabels.forEach((label, index) => {
   });
   $("#scenarios").append(button);
 });
-function sourceCard(title, path, generation) {
-  const card = node("article", undefined, "panel source-card");
+function sourceCard(title, path, generation, onRetry, group = "") {
+  const card = node("article", undefined, `panel source-card ${group}`);
   const header = node("header"), status = node("span", "请求中", "status pending"), retry = node("button", "重试", "secondary");
   header.append(node("h3", title), status, retry);
   const content = node("div", "等待来源响应…", "muted");
@@ -140,25 +144,36 @@ function sourceCard(title, path, generation) {
       return null;
     } finally { retry.disabled = false; }
   };
-  retry.addEventListener("click", load);
+  retry.addEventListener("click", async () => {
+    const data = await load();
+    if (onRetry && generation === sourceGeneration) onRetry(data);
+  });
   return load();
 }
 async function inspect() {
   const order = $("#order-id").value.trim(); if (!order) return;
+  const match = /^ORD-DEMO-(00[1-9]|01[0-2])$/.exec(order);
+  selectedScenario = match ? Number(match[1]) : null;
+  document.querySelectorAll(".scenario").forEach((button, index) => button.classList.toggle("selected", index + 1 === selectedScenario));
   const generation = ++sourceGeneration;
   $("#source-results").replaceChildren();
   sourceCard("OMS · 订单", `/api/oms/orders/${id(order)}`, generation);
   sourceCard("Warehouse · 原始备注", `/api/warehouse/orders/${id(order)}/notes`, generation);
-  const parcels = await sourceCard("OMS · 包裹引用", `/api/oms/orders/${id(order)}/parcels`, generation);
-  if (generation !== sourceGeneration || !Array.isArray(parcels)) return;
+  const parcels = await sourceCard("OMS · 包裹引用", `/api/oms/orders/${id(order)}/parcels`, generation, data => renderParcels(data, generation));
+  renderParcels(parcels, generation);
+}
+function renderParcels(parcels, generation) {
+  if (generation !== sourceGeneration) return;
+  document.querySelectorAll("#source-results .logistics-card").forEach(card => card.remove());
+  if (!Array.isArray(parcels)) return;
   for (const parcel of parcels) {
     if (!parcel.tracking_number) {
-      const card = node("article", undefined, "panel source-card");
+      const card = node("article", undefined, "panel source-card logistics-card");
       card.append(node("h3", `Logistics · ${parcel.parcel_id}`), node("p", "OMS 运单号为 null，无法请求物流来源。")); $("#source-results").append(card);
       continue;
     }
-    sourceCard(`Logistics · ${parcel.tracking_number}`, `/api/logistics/shipments/${id(parcel.tracking_number)}`, generation);
-    sourceCard(`Events · ${parcel.tracking_number}`, `/api/logistics/shipments/${id(parcel.tracking_number)}/events`, generation);
+    sourceCard(`Logistics · ${parcel.tracking_number}`, `/api/logistics/shipments/${id(parcel.tracking_number)}`, generation, null, "logistics-card");
+    sourceCard(`Events · ${parcel.tracking_number}`, `/api/logistics/shipments/${id(parcel.tracking_number)}/events`, generation, null, "logistics-card");
   }
 }
 $("#inspect-form").addEventListener("submit", event => { event.preventDefault(); inspect(); });
@@ -166,6 +181,7 @@ let customerOffset = 0, customerGeneration = 0;
 async function loadCustomerOrders() {
   const generation = ++customerGeneration, customer = $("#customer-id").value.trim();
   if (!customer) return;
+  $("#prev-orders").disabled = true; $("#next-orders").disabled = true;
   try {
     const {data} = await api(`/api/oms/customers/${id(customer)}/orders?limit=10&offset=${customerOffset}`);
     if (generation !== customerGeneration) return;
@@ -178,7 +194,10 @@ async function loadCustomerOrders() {
     });
     $("#orders-page").textContent = `第 ${customerOffset / 10 + 1} 页`;
     $("#prev-orders").disabled = customerOffset === 0; $("#next-orders").disabled = data.length < 10;
-  } catch (error) { $("#customer-orders").textContent = errorText(error); }
+  } catch (error) {
+    if (generation !== customerGeneration) return;
+    $("#customer-orders").textContent = errorText(error); $("#orders-page").textContent = "读取失败";
+  }
 }
 $("#customer-form").addEventListener("submit", event => { event.preventDefault(); customerOffset = 0; loadCustomerOrders(); });
 $("#prev-orders").addEventListener("click", () => { customerOffset = Math.max(0, customerOffset - 10); loadCustomerOrders(); });
@@ -192,6 +211,7 @@ async function loadPolicy() { try { jsonView($("#policy-result"), (await api("/a
 let listGeneration = 0;
 async function loadInquiries() {
   const generation = ++listGeneration;
+  $("#prev-inquiries").disabled = true; $("#next-inquiries").disabled = true;
   const params = new URLSearchParams({limit: "10", offset: String(inquiryOffset)});
   if ($("#inquiry-status").value) params.set("status", $("#inquiry-status").value);
   if ($("#inquiry-order").value.trim()) params.set("order_id", $("#inquiry-order").value.trim());
@@ -208,7 +228,10 @@ async function loadInquiries() {
     });
     $("#inquiry-page").textContent = `第 ${inquiryOffset / 10 + 1} 页`;
     $("#prev-inquiries").disabled = inquiryOffset === 0; $("#next-inquiries").disabled = data.length < 10;
-  } catch (error) { $("#inquiries").replaceChildren(node("p", errorText(error))); }
+  } catch (error) {
+    if (generation !== listGeneration) return;
+    $("#inquiries").replaceChildren(node("p", errorText(error))); $("#inquiry-page").textContent = "读取失败";
+  }
 }
 $("#inquiry-filter").addEventListener("submit", event => { event.preventDefault(); inquiryOffset = 0; loadInquiries(); });
 $("#prev-inquiries").addEventListener("click", () => { inquiryOffset = Math.max(0, inquiryOffset - 10); loadInquiries(); });
@@ -220,13 +243,16 @@ async function openInquiry(inquiryId) {
   }
   const generation = ++threadGeneration;
   currentInquiry = null; $("#send-button").disabled = true;
+  $("#latest-customer").hidden = true;
   $("#inquiry-id").value = inquiryId; $("#messages").replaceChildren(); $("#more-messages").hidden = true;
   $("#thread-info").textContent = "读取会话中…"; messageOffset = 0;
   try {
     const {data} = await api(`/api/support/inquiries/${id(inquiryId)}`);
     if (generation !== threadGeneration) return;
-    currentInquiry = data; $("#send-button").disabled = false;
+    currentInquiry = data; syncSendButton();
     $("#thread-info").textContent = `${data.status} · ${data.order_id || "无订单关联"} · 来源更新时间 ${data.updated_at ?? "null"}`;
+    $("#latest-customer").replaceChildren(node("strong", "当前最新客户消息"), node("small", data.latest_customer_message_id ?? "null"), node("div", data.customer_message, "body"));
+    $("#latest-customer").hidden = false;
     await loadMessages(generation); loadInquiries();
   } catch (error) { if (generation === threadGeneration) $("#thread-info").textContent = errorText(error); }
 }
@@ -247,7 +273,13 @@ async function loadMessages(generation = threadGeneration) {
     if (!messageOffset) $("#messages").append(node("p", "暂无消息记录。"));
   } catch (error) { notice(errorText(error)); }
 }
-$("#more-messages").addEventListener("click", () => runForm($("#send-message"), () => loadMessages()));
+$("#more-messages").addEventListener("click", async () => {
+  const button = $("#more-messages");
+  if (button.disabled) return;
+  button.disabled = true;
+  try { await loadMessages(); }
+  finally { button.disabled = false; }
+});
 $("#open-inquiry").addEventListener("submit", event => { event.preventDefault(); openInquiry($("#inquiry-id").value.trim()); });
 $("#new-inquiry").addEventListener("submit", event => {
   event.preventDefault(); const form = event.currentTarget;
@@ -345,8 +377,14 @@ $("#reset-form").addEventListener("submit", event => {
     // Do not reset while another console mutation is still in flight.
     if ([...document.querySelectorAll("form[data-busy]")].some(other => other !== form)) throw new Error("请等待其他操作完成后再重置。");
     const {data} = await api("/api/admin/reset", "POST", form.elements.clock.value === "now" ? {base_time:new Date().toISOString()} : {});
-    pendingCommands.clear(); ++threadGeneration; currentInquiry = null; $("#messages").replaceChildren(); $("#thread-info").textContent = "环境已重置，请重新选择会话。"; $("#send-message").reset(); $("#followup-reference").hidden = true; $("#more-messages").hidden = true;
+    pendingCommands.clear(); ++threadGeneration; currentInquiry = null; $("#messages").replaceChildren(); $("#latest-customer").hidden = true; $("#thread-info").textContent = "环境已重置，请重新选择会话。"; $("#send-message").reset(); $("#followup-reference").hidden = true; $("#more-messages").hidden = true;
     inquiryOffset = 0; form.reset(); success(form, `重置完成 · 来源基准时间 ${data.base_time}`);
+    for (const selector of ["#send-message", "#new-inquiry", "#fault-form", "#simulation-form"]) {
+      const control = $(selector); control.reset();
+      const output = $(".operation-result", control); output.textContent = ""; output.className = "operation-result";
+    }
+    faultDescription(); prepareOperation();
+    $("#simulation-result").replaceChildren(node("p", "环境已重置，请执行新的来源写入。"));
     ++customerGeneration; customerOffset = 0; $("#customer-orders").replaceChildren();
     $("#orders-page").textContent = ""; $("#prev-orders").disabled = true; $("#next-orders").disabled = true;
     await Promise.all([refreshAfterWrite(), loadFaults(), loadInquiries(), inspect(), loadPolicy()]);
