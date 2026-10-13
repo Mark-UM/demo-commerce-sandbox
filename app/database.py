@@ -131,17 +131,37 @@ class Store:
                 "ORDER BY rowid",
                 (collection, key),
             ).fetchall()
-        return [json.loads(row[0]) for row in rows]
+            result = [json.loads(row[0]) for row in rows]
+            if collection == "inquiries":
+                replied = (
+                    db.execute(
+                        "SELECT 1 FROM replies WHERE inquiry_id=? LIMIT 1",
+                        (key,),
+                    ).fetchone()
+                    is not None
+                )
+                for row in result:
+                    row["status"] = "REPLIED" if replied else "OPEN"
+        return result
 
-    def list_inquiries(self, limit: int, offset: int, order_id: str | None):
+    def list_inquiries(
+        self, limit: int, offset: int, order_id: str | None, status: str | None = None
+    ):
         with self.connect() as db:
             rows = db.execute(
-                "SELECT payload FROM records WHERE collection='inquiries' "
+                "SELECT payload, EXISTS(SELECT 1 FROM replies "
+                "WHERE inquiry_id=records.lookup_key) AS replied "
+                "FROM records WHERE collection='inquiries' "
                 "AND (? IS NULL OR json_extract(payload, '$.order_id')=?) "
+                "AND (? IS NULL OR EXISTS(SELECT 1 FROM replies "
+                "WHERE inquiry_id=records.lookup_key) = (?='REPLIED')) "
                 "ORDER BY lookup_key LIMIT ? OFFSET ?",
-                (order_id, order_id, limit, offset),
+                (order_id, order_id, status, status, limit, offset),
             ).fetchall()
-        return [json.loads(row[0]) for row in rows]
+        return [
+            {**json.loads(payload), "status": "REPLIED" if replied else "OPEN"}
+            for payload, replied in rows
+        ]
 
     def list_replies(self, inquiry_id: str, limit: int, offset: int):
         with self.connect() as db:

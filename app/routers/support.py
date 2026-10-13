@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request
 
 from app.errors import SourceError, require, store
-from app.schemas import AcceptedReply, Inquiry, Receipt, ReplyCommand
+from app.schemas import AcceptedReply, Inquiry, InquiryStatus, Receipt, ReplyCommand
 
 router = APIRouter(prefix="/api/support", tags=["Support"])
 
@@ -17,8 +17,9 @@ def inquiries(
     limit: Limit = 50,
     offset: Offset = 0,
     order_id: Annotated[str | None, Query(min_length=1)] = None,
+    status: InquiryStatus | None = None,
 ):
-    return store(request).list_inquiries(limit, offset, order_id)
+    return store(request).list_inquiries(limit, offset, order_id, status)
 
 
 @router.get("/inquiries/{inquiry_id}", response_model=Inquiry)

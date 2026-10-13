@@ -141,6 +141,24 @@ def main():
                 receipt = client.post(reply_path, json=command)
                 assert receipt.status_code == 200
                 assert client.post(reply_path, json=command).json() == receipt.json()
+                pending = client.get(
+                    "/api/support/inquiries",
+                    params={
+                        "order_id": order_id,
+                        "status": "OPEN",
+                    },
+                )
+                assert pending.status_code == 200
+                assert pending.json() == []
+                replied = client.get(
+                    "/api/support/inquiries",
+                    params={
+                        "order_id": order_id,
+                        "status": "REPLIED",
+                    },
+                )
+                assert replied.status_code == 200
+                assert replied.json() == [{**inquiry, "status": "REPLIED"}]
                 history = client.get(reply_path)
                 assert history.status_code == 200
                 assert history.json() == [

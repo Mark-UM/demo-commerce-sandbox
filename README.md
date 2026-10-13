@@ -79,6 +79,11 @@ Inquiry discovery returns an array ordered by inquiry ID. Use `limit` (1–100,
 default 50), `offset` (nonnegative, default 0), and optional `order_id` for exact
 matching; continue paging until an empty page. S12's inquiry remains discoverable
 even though its order is absent. A filter with no matches returns `[]`.
+Use `status=OPEN` for the pending queue and `status=REPLIED` for inquiries with
+at least one accepted reply. Omitting status returns both. Status is exposed
+on each inquiry; REPLIED means acceptance by this fake Support system, not
+delivery, case resolution or Product approval. Filtering precedes pagination.
+Retries do not duplicate queue transitions; reset restores OPEN inquiries.
 
 Reply history accepts the same pagination parameters and returns an array in
 acceptance order with `reply_id`, `inquiry_id`, exact `text`, `idempotency_key`,
@@ -137,11 +142,14 @@ waiting restock, planned shipment/uncollected, stale logistics, logistics 504,
 warehouse 503, missing logistics, conflicting sources, and nonexistent order.
 Golden scenarios contain 11 real orders and 12 inquiries; S12 references an
 absent order. Ordinary IDs ORD-DEMO-101 through ORD-DEMO-209 add 109 orders.
-The complete seed has 120 orders, 60 customer references, 20 SKUs, 142 parcels,
-141 shipments, 543 tracking events, 120 warehouse notes and 60 inquiries.
+The complete seed has 120 orders, 60 customer references, 20 SKUs, 143 parcels,
+141 shipments, 539 tracking events, 120 warehouse notes and 60 inquiries.
 All relations and quantities are deterministic; no random generator or clock
 read is needed. ORD-DEMO-105 supplies instruction-like warehouse text as plain
 source data; INQ-DEMO-106 supplies a refund inquiry. Neither triggers actions.
+INQ-DEMO-107 has no order reference; ORD-DEMO-110 has a packed parcel without
+carrier/tracking assignment; TRK-DEMO-113-1 has current status with empty event
+history. These are successful source reads, distinct from S10's missing shipment.
 See [scenario details](docs/scenarios.md) and [HTTP contract](docs/api-contract.md).
 See [implementation and verification status](docs/implementation-status.md)
 for completed scope, current limitations and the Product repository boundary.

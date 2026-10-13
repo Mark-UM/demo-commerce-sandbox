@@ -3,9 +3,79 @@
 import argparse
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 
 import httpx
+
+
+def check_source_facts(client):
+    """Functional acceptance through independent source HTTP APIs only."""
+    orders = {}
+    for customer in range(1, 61):
+        response = client.get(f"/api/oms/customers/CUS-DEMO-{customer:03}/orders")
+        assert response.status_code == 200
+        for order in response.json():
+            assert order["customer_reference"] == f"CUS-DEMO-{customer:03}"
+            orders[order["order_id"]] = order
+    assert len(orders) == 120
+    delivered = split = empty_history = unassigned = 0
+    for order_id, order in orders.items():
+        parcel_response = client.get(f"/api/oms/orders/{order_id}/parcels")
+        assert parcel_response.status_code == 200
+        parcels = parcel_response.json()
+        assert sum(item["quantity"] for item in order["items"]) >= len(parcels), (
+            order_id
+        )
+        split += len(parcels) > 1
+        notes = client.get(f"/api/warehouse/orders/{order_id}/notes")
+        assert notes.status_code == (503 if order_id == "ORD-DEMO-009" else 200)
+        for parcel in parcels:
+            assert parcel["order_id"] == order_id
+            tracking = parcel["tracking_number"]
+            if tracking is None:
+                assert order["status"] == "PACKED"
+                assert parcel["carrier"] is None
+                unassigned += 1
+                continue
+            path = f"/api/logistics/shipments/{tracking}"
+            shipment, events = client.get(path), client.get(path + "/events")
+            expected = (
+                504
+                if order_id == "ORD-DEMO-008"
+                else 404
+                if order_id == "ORD-DEMO-010"
+                else 200
+            )
+            assert shipment.status_code == events.status_code == expected, tracking
+            if expected != 200:
+                continue
+            assert shipment.json()["parcel_id"] == parcel["parcel_id"]
+            history = events.json()
+            empty_history += not history
+            for event in history:
+                assert event["parcel_id"] == parcel["parcel_id"]
+                assert event["occurred_at"] <= shipment.json()["updated_at"]
+            if order["status"] == "DELIVERED":
+                deliveries = [
+                    datetime.fromisoformat(e["occurred_at"])
+                    for e in history
+                    if e["status"] == "DELIVERED"
+                ]
+                assert deliveries
+                assert datetime.fromisoformat(order["updated_at"]) >= max(deliveries)
+                delivered += 1
+            if order_id == "ORD-DEMO-011":
+                assert notes.json()[0]["created_at"] >= history[0]["occurred_at"]
+                assert "not been handed" in notes.json()[0]["text"]
+    assert unassigned == empty_history == 1
+    unknown_reference = client.get("/api/support/inquiries/INQ-DEMO-107")
+    assert unknown_reference.status_code == 200
+    assert unknown_reference.json()["order_id"] is None
+    print(
+        f"Functional audit: 120 orders; {split} split orders; "
+        f"{delivered} delivered parcels; source absence cases passed"
+    )
 
 
 def main():
@@ -30,6 +100,7 @@ def main():
         assert summary.json()["orders"] == 120
         assert summary.json()["customers"] == 60
         assert client.get("/api/policy/order-support").status_code == 200
+        check_source_facts(client)
         inquiries = []
         for offset in (0, 25, 50):
             response = client.get(

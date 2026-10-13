@@ -15,7 +15,7 @@ from event ordering. Status strings remain open rather than a universal enum.
 | Shipment | tracking_number, parcel_id, status (nullable), updated_at (nullable) |
 | Event | event_id, parcel_id, status, description, occurred_at, updated_at (nullable) |
 | Note | note_id, order_id, text, created_at, updated_at (nullable) |
-| Inquiry | inquiry_id, order_id (nullable), customer_message, created_at |
+| Inquiry | inquiry_id, order_id (nullable), customer_message, created_at, status (OPEN or REPLIED) |
 | Reply receipt | reply_id, status (SENT), sent_at |
 | Policy fact | code, content, updated_at (nullable); envelope has facts array |
 
@@ -110,7 +110,13 @@ The next Support increment provides GET `/api/support/inquiries` with `limit`
 (1–100, default 50), `offset` (>=0, default 0), and optional nonempty `order_id`
 for an exact source reference match. Results are a bare array in inquiry-ID
 order, including S12. No matches or an offset past the end returns `[]`.
-Filtering occurs before pagination; no Product processing status is inferred.
+Optional status=OPEN/REPLIED filters before pagination. OPEN means no accepted
+reply exists; REPLIED means at least one was accepted. Omitting status returns
+both. Invalid status is 422. This is the receiver's source state, not Product
+case/approval state, and does not claim real delivery or issue resolution.
+Single-inquiry lookup reports the same state. State reflects persisted accepted
+replies, so retry/conflict creates no extra transition, restarts preserve it,
+and reset restores OPEN.
 
 GET `/api/support/inquiries/{inquiry_id}/replies` uses the same limit/offset
 and returns accepted records in insertion order: `reply_id`, `status`, `sent_at`,
@@ -118,7 +124,7 @@ and returns accepted records in insertion order: `reply_id`, `status`, `sent_at`
 rows, and results are isolated by inquiry. A known inquiry without replies
 returns `[]`; an unknown inquiry returns 404. Invalid pagination returns 422.
 History persists across restart and clears on reset. Existing POST receipts
-and single-inquiry schemas are unchanged.
+are unchanged; inquiry reads additionally expose the source OPEN/REPLIED state.
 
 - This phase uses the requested `/api/...` paths, not the older `/.../v1` paths.
 - OMS lists parcels, then the Product retrieves each shipment and event list.

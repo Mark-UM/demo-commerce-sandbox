@@ -4,8 +4,10 @@ Every ID and source record is deterministic. Reference time T0 is
 `2026-09-20T06:00:00Z` by default; reset can explicitly select another UTC T0
 using `--base-time` (see README). All absolute dates below describe the default
 fixture; relative offsets and source IDs hold for every selected T0.
-Orders are created T0 minus 5 days and updated T0 minus
-30 minutes. Notes are created T0 minus 20 minutes. Shipment updates are T0 minus
+Orders are created T0 minus 5 days and updated T0 minus 30 minutes, except
+delivered orders (minus 10 minutes, at or after the delivery event).
+Notes are created T0 minus 20 minutes except S11 (minus 5 minutes, after
+the pickup event, to represent an actual conflict). Shipment updates are T0 minus
 10 minutes except S07 (minus 72 hours). Event occurrence times are at or before
 the corresponding shipment update; event update timestamps are unknown/null.
 Parcel update timestamps are null. S05's note update is also null.
@@ -49,6 +51,10 @@ and 20 SKUs. Every tenth ordinary order is unshipped; every third fulfilled
 order has two parcels; delivered and in-transit orders have four events per
 parcel. INQ-DEMO-101 through INQ-DEMO-148 add 48 inquiries (60 total).
 Ordinary notes are created T0 minus two hours with unknown update timestamps.
+Split ordinary orders contain at least two physical items. ORD-DEMO-110 is
+PACKED with one parcel but null carrier/tracking and no shipment. INQ-DEMO-107
+has no order reference. TRK-DEMO-113-1 is IN_TRANSIT with known update time but
+an empty event list. These source absence cases require no database editing.
 ORD-DEMO-105 contains instruction-like warehouse text as plain external data;
 INQ-DEMO-106 requests a refund. There is no refund action or instruction execution.
 Policy facts are updated T0 minus five days. See summary for actual source counts.

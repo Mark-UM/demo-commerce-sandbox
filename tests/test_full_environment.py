@@ -25,7 +25,7 @@ def test_full_seed_relationships_counts_and_summary(client):
     assert data["warehouse_notes"] == 120
     assert data["parcels"] >= 140
     assert data["shipment_events"] >= 450
-    assert data["shipments"] == data["parcels"] - 1  # S10 lacks logistics.
+    assert data["shipments"] == data["parcels"] - 2  # S10 missing; ORD-110 unassigned.
     assert data["replies"] == data["fault_overrides"] == 0
     collections = defaultdict(dict)
     with client.app.state.store.connect() as db:
@@ -37,21 +37,25 @@ def test_full_seed_relationships_counts_and_summary(client):
         assert order_id in orders
         for parcel in parcels:
             tracking = parcel["tracking_number"]
+            if tracking is None:
+                assert order_id == "ORD-DEMO-110"
+                assert parcel["carrier"] is None
+                continue
             if order_id == "ORD-DEMO-010":
                 assert tracking not in collections["shipments"]
                 continue
             shipment = collections["shipments"][tracking][0]
             assert shipment["parcel_id"] == parcel["parcel_id"]
-            for event in collections["events"][tracking]:
+            for event in collections["events"].get(tracking, []):
                 assert event["parcel_id"] == parcel["parcel_id"]
                 assert event["updated_at"] is None
                 assert event["occurred_at"] <= shipment["updated_at"]
     for order_id in collections["notes"]:
         assert order_id in orders
     for inquiries in collections["inquiries"].values():
-        assert (
-            inquiries[0]["order_id"] in orders
-            or inquiries[0]["order_id"] == "ORD-DEMO-012"
+        assert inquiries[0]["order_id"] in orders or inquiries[0]["order_id"] in (
+            "ORD-DEMO-012",
+            None,
         )
     for customer in range(1, 61):
         response = client.get(f"/api/oms/customers/CUS-DEMO-{customer:03}/orders")

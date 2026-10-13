@@ -8,7 +8,7 @@ HTTP authority.
 | Capability | Implementation |
 |---|---|
 | Independent service | One FastAPI application, SQLite, health and Swagger |
-| Deterministic seed | 120 orders, 60 customer references, 20 SKUs, 142 parcels, 141 shipments, 543 events, 120 notes, 60 inquiries |
+| Deterministic seed | 120 orders, 60 customer references, 20 SKUs, 143 parcels, 141 shipments, 539 events, 120 notes, 60 inquiries |
 | Golden scenarios | S01-S12 unchanged; S12 deliberately has no order |
 | OMS | Order/items, parcel discovery, customer order pagination |
 | Logistics | Shipment and events; independent per-parcel failures |
@@ -25,7 +25,7 @@ HTTP authority.
 
 ## Verification on 2026-10-13
 
-- Python 3.13: 104 tests passed. Two third-party deprecation warnings remain.
+- Python 3.13: 109 tests passed. Two third-party deprecation warnings remain.
 - Ruff lint and format checks passed; diff whitespace check passed.
 - Real Uvicorn HTTP smoke passed, including normal/golden failures, authentication,
   Policy, complete inventory, source reads, reply deduplication, actual client
@@ -39,6 +39,21 @@ HTTP authority.
   confirmed on this host. CI is configured, not yet executed remotely.
 
 ## Deliberate boundaries
+
+Functional readiness inspection reproduced and fixed four gaps: delivered
+orders predating delivery, S11's note predating pickup (normal progression
+rather than conflict), one-item ordinary orders split into two parcels, and
+ignored pending-inquiry status filtering. Source OPEN/REPLIED now reflects
+accepted reply existence and is queryable without Product processing logic.
+Fixtures also expose missing order references, unassigned tracking, and a
+known shipment with no event history. The running HTTP verifier checks all
+120 orders and every parcel through separate source endpoints.
+Real HTTP acceptance passed both before and after restart, covering 34 split
+orders and 30 delivered parcels. This supports immediate use for the defined
+source-read/reply integration tests. For wall-clock freshness tests, explicitly
+reset T0 to the test's current UTC time; the default historical fixture should
+not be treated as current data. New customer messages/follow-ups and live order
+progression have no write APIs; current inquiries are seeded test inputs.
 
 Product HTTP adapters, canonical snapshots, freshness rules, authorization,
 AI, validation, human approval and Product end-to-end acceptance belong to the

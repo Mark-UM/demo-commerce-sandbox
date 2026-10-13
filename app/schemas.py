@@ -57,11 +57,15 @@ class Note(SourceModel):
     updated_at: datetime | None
 
 
+InquiryStatus = Literal["OPEN", "REPLIED"]
+
+
 class Inquiry(SourceModel):
     inquiry_id: Identifier
     order_id: str | None
     customer_message: Identifier
     created_at: datetime
+    status: InquiryStatus = "OPEN"
 
 
 class ReplyCommand(SourceModel):
