@@ -11,7 +11,7 @@ from starlette.exceptions import HTTPException
 
 from app.database import Store
 from app.errors import SourceError
-from app.routers import admin, logistics, oms, policy, support, warehouse
+from app.routers import admin, logistics, oms, policy, simulation, support, warehouse
 from app.schemas import ErrorResponse
 from app.security import authenticate
 
@@ -98,6 +98,7 @@ def create_app(db_path: str | None = None, api_key: str | None = None) -> FastAP
         policy.router,
         support.router,
         admin.router,
+        simulation.router,
     ):
         app.include_router(
             router,

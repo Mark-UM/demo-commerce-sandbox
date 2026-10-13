@@ -158,7 +158,13 @@ def main():
                     },
                 )
                 assert replied.status_code == 200
-                assert replied.json() == [{**inquiry, "status": "REPLIED"}]
+                assert replied.json() == [
+                    {
+                        **inquiry,
+                        "status": "REPLIED",
+                        "updated_at": receipt.json()["sent_at"],
+                    }
+                ]
                 history = client.get(reply_path)
                 assert history.status_code == 200
                 assert history.json() == [
@@ -225,6 +231,17 @@ def main():
                 process = subprocess.Popen(server_command, env=env)
                 wait_ready(client, process)
                 subprocess.run(verifier, env=env, check=True, timeout=30)
+                subprocess.run(
+                    [
+                        sys.executable,
+                        "scripts/live_conversation.py",
+                        "--base-url",
+                        f"http://127.0.0.1:{port}",
+                    ],
+                    env=env,
+                    check=True,
+                    timeout=30,
+                )
         finally:
             process.terminate()
             try:

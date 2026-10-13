@@ -13,7 +13,8 @@ HTTP authority.
 | OMS | Order/items, parcel discovery, customer order pagination |
 | Logistics | Shipment and events; independent per-parcel failures |
 | Warehouse | Original free text, restock/plans/conflicts, instruction-like test text |
-| Support | Inquiry discovery, exact accepted replies, atomic persistent idempotency |
+| Support | New inquiries/follow-ups, message history, pending discovery, bound replies and persistent idempotency |
+| Continuous progression | Admin creation/update of OMS, parcels, shipments, events and warehouse notes |
 | Policy | Two static source facts; no retrieval/interpretation engine |
 | Fault controls | NORMAL, TIMEOUT_ONCE, ALWAYS_TIMEOUT, HTTP_500, HTTP_429, SLOW_RESPONSE, STALE_DATA, EMPTY_RESULT, PARTIAL_FAILURE, CONFLICTING_DATA, MALFORMED_RESPONSE |
 | Reset | Atomic HTTP/CLI reset with optional explicit UTC reference |
@@ -25,7 +26,7 @@ HTTP authority.
 
 ## Verification on 2026-10-13
 
-- Python 3.13: 109 tests passed. Two third-party deprecation warnings remain.
+- Python 3.13: 123 tests passed. Two third-party deprecation warnings remain.
 - Ruff lint and format checks passed; diff whitespace check passed.
 - Real Uvicorn HTTP smoke passed, including normal/golden failures, authentication,
   Policy, complete inventory, source reads, reply deduplication, actual client
@@ -52,8 +53,12 @@ Real HTTP acceptance passed both before and after restart, covering 34 split
 orders and 30 delivered parcels. This supports immediate use for the defined
 source-read/reply integration tests. For wall-clock freshness tests, explicitly
 reset T0 to the test's current UTC time; the default historical fixture should
-not be treated as current data. New customer messages/follow-ups and live order
-progression have no write APIs; current inquiries are seeded test inputs.
+not be treated as current data. Continuous ingress and per-source progression
+are now implemented and verified: customer follow-ups reopen the queue, old
+reply retries do not close new questions, bound stale replies conflict, and
+the live HTTP scenario explicitly drives pickup, transit and delivery.
+Unknown source updates remain null. No automatic cross-system progression is
+introduced; a test driver controls each subsystem independently.
 
 Product HTTP adapters, canonical snapshots, freshness rules, authorization,
 AI, validation, human approval and Product end-to-end acceptance belong to the

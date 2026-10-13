@@ -73,9 +73,10 @@ def test_custom_cli_reset_is_repeatable_and_survives_restart(tmp_path):
             == "2026-10-10T06:00:00Z"
         )
         receipt = client.post(REPLY_PATH, json=COMMAND).json()
+        after_reply = snapshot(store)
     with TestClient(create_app(str(path))) as restarted:
         assert restarted.post(REPLY_PATH, json=COMMAND).json() == receipt
-        assert snapshot(store) == before
+        assert snapshot(store) == after_reply
     result = reset_cli(path, "--base-time", "2026-10-13T06:00:00+00:00")
     assert result.returncode == 0, result.stderr
     assert snapshot(store) == before

@@ -15,7 +15,8 @@ from event ordering. Status strings remain open rather than a universal enum.
 | Shipment | tracking_number, parcel_id, status (nullable), updated_at (nullable) |
 | Event | event_id, parcel_id, status, description, occurred_at, updated_at (nullable) |
 | Note | note_id, order_id, text, created_at, updated_at (nullable) |
-| Inquiry | inquiry_id, order_id (nullable), customer_message, created_at, status (OPEN or REPLIED) |
+| Inquiry | inquiry_id, order_id (nullable), latest customer_message, created_at, status, updated_at (nullable), latest_customer_message_id (nullable) |
+| Support message | message_id, inquiry_id, sender_type (CUSTOMER/SUPPORT), text, created_at, in_reply_to_message_id (nullable) |
 | Reply receipt | reply_id, status (SENT), sent_at |
 | Policy fact | code, content, updated_at (nullable); envelope has facts array |
 
@@ -110,12 +111,13 @@ The next Support increment provides GET `/api/support/inquiries` with `limit`
 (1–100, default 50), `offset` (>=0, default 0), and optional nonempty `order_id`
 for an exact source reference match. Results are a bare array in inquiry-ID
 order, including S12. No matches or an offset past the end returns `[]`.
-Optional status=OPEN/REPLIED filters before pagination. OPEN means no accepted
-reply exists; REPLIED means at least one was accepted. Omitting status returns
+Optional status=OPEN/REPLIED filters before pagination. OPEN means the latest
+accepted message is from the customer; REPLIED means it is from Support.
+Customer follow-ups reopen the queue. Omitting status returns
 both. Invalid status is 422. This is the receiver's source state, not Product
 case/approval state, and does not claim real delivery or issue resolution.
-Single-inquiry lookup reports the same state. State reflects persisted accepted
-replies, so retry/conflict creates no extra transition, restarts preserve it,
+Single-inquiry lookup reports the same state. State reflects persisted message
+acceptance order, so retry/conflict creates no extra transition, restarts preserve it,
 and reset restores OPEN.
 
 GET `/api/support/inquiries/{inquiry_id}/replies` uses the same limit/offset
@@ -139,3 +141,42 @@ are unchanged; inquiry reads additionally expose the source OPEN/REPLIED state.
   lookup and deterministic ordinary records. Offline CLI reset remains available.
 - Existing seed versions are not silently replaced at startup; an explicit
   reset installs sandbox-v2 and clears the previous run.
+
+## Continuous ingress and simulation
+
+POST `/api/support/inquiries` receives customer_message, optional nullable
+order_id and required idempotency_key; returns the original Inquiry receipt
+with 201. POST `/api/support/inquiries/{id}/messages` receives text, key and
+optional order_id; returns the original CUSTOMER SupportMessage with 201.
+Omitted follow-up order_id preserves the reference; explicit null clears it.
+Text is nonblank, exact and limited to 10,000 characters; keys are nonblank and
+limited to 200. References need not exist and confer no access. Same key/payload
+deduplicates atomically; different payload is 409/IDEMPOTENCY_CONFLICT. Create
+keys are scoped to new-inquiry ingress; follow-up keys to the specific inquiry.
+
+GET on the messages path uses the same limit/offset rules, returns the full
+CUSTOMER/SUPPORT stream in acceptance order, and returns 404 for an unknown
+inquiry. Lookup exposes latest customer text and message ID while retaining
+the original inquiry created_at. updated_at is the source's actual accepted
+activity timestamp; initial seed update time remains unknown/null.
+
+Reply commands may additionally bind in_reply_to_message_id. The idempotency
+lookup runs before the latest-message guard: retrying an accepted old command
+returns the same receipt with no new message or queue transition. A new command
+with an outdated target is 409/CUSTOMER_MESSAGE_CHANGED. Reusing a key with
+changed text or binding is 409/IDEMPOTENCY_CONFLICT. A missing binding preserves
+legacy behavior; callers should bind replies during evolving conversations.
+Receiver acceptance never proves Product approval, case resolution or delivery.
+
+Source simulation controls under `/api/admin/oms`, `/api/admin/logistics` and
+`/api/admin/warehouse` accept the corresponding source models. The endpoint
+table in README and OpenAPI define requests. IDs cannot collide; parent links
+must match; tracking assignments are unique and immutable once a shipment is
+registered. Missing records are 404 and association/identity conflicts 409.
+Source timestamps require a timezone and normalize to UTC; numeric or naive
+inputs are 422. Unknown updates remain null, including on writes. Each control
+updates only one source record: no event-to-status inference or cross-system
+cascade occurs. Test drivers, rather than Product Providers, call these routes.
+Fault rules apply to read endpoints, so controls work during simulated outages.
+New source records, incoming keys, conversations and accepted replies persist
+across restart and clear on reset; golden identities and baseline data return.

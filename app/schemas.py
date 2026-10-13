@@ -1,9 +1,50 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
-Identifier = Annotated[str, Field(min_length=1)]
+
+def nonblank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("Must not be blank")
+    return value
+
+
+def timestamp_input(value):
+    if not isinstance(value, (str, datetime)):
+        raise ValueError("Use an ISO 8601 timestamp")
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError as error:
+            raise ValueError("Use an ISO 8601 timestamp") from error
+    return value
+
+
+def source_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        raise ValueError("Source timestamps must include a timezone")
+    return value.astimezone(UTC)
+
+
+Identifier = Annotated[str, Field(min_length=1), AfterValidator(nonblank)]
+SourceTime = Annotated[
+    datetime, BeforeValidator(timestamp_input), AfterValidator(source_utc)
+]
+MessageText = Annotated[
+    str, Field(min_length=1, max_length=10000), AfterValidator(nonblank)
+]
+MessageKey = Annotated[
+    str, Field(min_length=1, max_length=200), AfterValidator(nonblank)
+]
 
 
 class SourceModel(BaseModel):
@@ -13,7 +54,7 @@ class SourceModel(BaseModel):
 class Item(SourceModel):
     sku: Identifier
     product_name: Identifier
-    quantity: Annotated[int, Field(gt=0)]
+    quantity: Annotated[int, Field(strict=True, gt=0)]
 
 
 class Order(SourceModel):
@@ -21,8 +62,8 @@ class Order(SourceModel):
     customer_reference: str | None
     status: Identifier
     items: list[Item]
-    created_at: datetime
-    updated_at: datetime | None
+    created_at: SourceTime
+    updated_at: SourceTime | None
 
 
 class Parcel(SourceModel):
@@ -30,14 +71,14 @@ class Parcel(SourceModel):
     order_id: Identifier
     carrier: str | None
     tracking_number: str | None
-    updated_at: datetime | None
+    updated_at: SourceTime | None
 
 
 class Shipment(SourceModel):
     tracking_number: Identifier
     parcel_id: Identifier
     status: str | None
-    updated_at: datetime | None
+    updated_at: SourceTime | None
 
 
 class Event(SourceModel):
@@ -45,16 +86,16 @@ class Event(SourceModel):
     parcel_id: Identifier
     status: Identifier
     description: str
-    occurred_at: datetime
-    updated_at: datetime | None
+    occurred_at: SourceTime
+    updated_at: SourceTime | None
 
 
 class Note(SourceModel):
     note_id: Identifier
     order_id: Identifier
     text: str
-    created_at: datetime
-    updated_at: datetime | None
+    created_at: SourceTime
+    updated_at: SourceTime | None
 
 
 InquiryStatus = Literal["OPEN", "REPLIED"]
@@ -64,13 +105,53 @@ class Inquiry(SourceModel):
     inquiry_id: Identifier
     order_id: str | None
     customer_message: Identifier
-    created_at: datetime
+    created_at: SourceTime
     status: InquiryStatus = "OPEN"
+    updated_at: SourceTime | None = None
+    latest_customer_message_id: str | None = None
+
+
+class InquiryCreate(SourceModel):
+    customer_message: MessageText
+    order_id: Identifier | None = None
+    idempotency_key: MessageKey
+
+
+class CustomerMessageCreate(SourceModel):
+    text: MessageText
+    idempotency_key: MessageKey
+    order_id: Identifier | None = None
+
+
+class SupportMessage(SourceModel):
+    message_id: Identifier
+    inquiry_id: Identifier
+    sender_type: Literal["CUSTOMER", "SUPPORT"]
+    text: str
+    created_at: SourceTime
+    in_reply_to_message_id: str | None = None
+
+
+class OrderState(SourceModel):
+    status: Identifier
+    updated_at: SourceTime | None
+
+
+class ParcelAssignment(SourceModel):
+    carrier: Identifier | None
+    tracking_number: Identifier | None
+    updated_at: SourceTime | None
+
+
+class ShipmentState(SourceModel):
+    status: Identifier | None
+    updated_at: SourceTime | None
 
 
 class ReplyCommand(SourceModel):
     text: Annotated[str, Field(min_length=1, max_length=10000)]
     idempotency_key: Annotated[str, Field(min_length=1, max_length=200)]
+    in_reply_to_message_id: Identifier | None = None
 
     @field_validator("text", "idempotency_key")
     @classmethod
@@ -83,7 +164,7 @@ class ReplyCommand(SourceModel):
 class Receipt(SourceModel):
     reply_id: Identifier
     status: Literal["SENT"]
-    sent_at: datetime
+    sent_at: SourceTime
 
 
 class AcceptedReply(Receipt):

@@ -12,5 +12,9 @@
 - Full Sandbox implementation includes 120 deterministic orders, the unchanged
   S01-S12 scenarios, source read/reply APIs, Policy facts, independent fault
   controls, HTTP reset, API Key service authentication and container deployment.
+- Continuous simulation includes idempotent customer ingress/follow-ups and
+  explicit admin writes to individual OMS, Logistics and Warehouse source records.
+- Source writes must not automatically advance other subsystems or interpret
+  customer text. Preserve history, IDs and source timestamp/null semantics.
 - Do not build Product adapters, freshness rules, authorization workflows, AI
   answers, or real ecommerce integrations. Keep the single-service design.

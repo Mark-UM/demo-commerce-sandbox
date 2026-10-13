@@ -100,6 +100,32 @@ def test_internal_errors_are_structured_without_leaking_data(tmp_path, monkeypat
         assert "sensitive" not in response.text
 
 
+def test_new_customer_ingress_is_authenticated_and_rejection_is_side_effect_free(
+    client,
+):
+    command = {"customer_message": "New question", "idempotency_key": "auth-ingress"}
+    assert client.post("/api/support/inquiries", json=command).status_code == 401
+    assert (
+        client.post(
+            "/api/support/inquiries", json=command, headers={"X-API-Key": "wrong"}
+        ).status_code
+        == 403
+    )
+    accepted = client.post(
+        "/api/support/inquiries", json=command, headers={"X-API-Key": "test-key"}
+    )
+    assert accepted.status_code == 201
+    path = f"/api/support/inquiries/{accepted.json()['inquiry_id']}/messages"
+    assert (
+        client.post(
+            path, json={"text": "Follow-up", "idempotency_key": "k"}
+        ).status_code
+        == 401
+    )
+    messages = client.get(path, headers={"X-API-Key": "test-key"})
+    assert len(messages.json()) == 1
+
+
 def test_default_service_key_is_active(tmp_path, monkeypatch):
     monkeypatch.delenv("SANDBOX_API_KEY")
     with TestClient(create_app(str(tmp_path / "default.sqlite3"))) as client:

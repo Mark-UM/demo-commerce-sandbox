@@ -60,7 +60,10 @@ and overrides. Before that reset, old datasets may lack the Policy record.
 | GET | `/api/logistics/shipments/{tracking_number}/events` | Source tracking events |
 | GET | `/api/warehouse/orders/{order_id}/notes` | Original free-text notes |
 | GET | `/api/support/inquiries` | Discover inquiries with pagination/order filter |
+| POST | `/api/support/inquiries` | Receive a new customer inquiry |
 | GET | `/api/support/inquiries/{inquiry_id}` | Customer inquiry |
+| GET | `/api/support/inquiries/{inquiry_id}/messages` | Read customer/support conversation history |
+| POST | `/api/support/inquiries/{inquiry_id}/messages` | Receive a customer follow-up |
 | GET | `/api/support/inquiries/{inquiry_id}/replies` | Inspect accepted reply history |
 | POST | `/api/support/inquiries/{inquiry_id}/replies` | Record simulated reply |
 | GET | `/api/admin/scenarios` | List explicit fault overrides |
@@ -79,11 +82,80 @@ Inquiry discovery returns an array ordered by inquiry ID. Use `limit` (1–100,
 default 50), `offset` (nonnegative, default 0), and optional `order_id` for exact
 matching; continue paging until an empty page. S12's inquiry remains discoverable
 even though its order is absent. A filter with no matches returns `[]`.
-Use `status=OPEN` for the pending queue and `status=REPLIED` for inquiries with
-at least one accepted reply. Omitting status returns both. Status is exposed
+Use `status=OPEN` for the pending queue and `status=REPLIED` when the latest
+accepted message is a support reply. Customer follow-ups reopen the inquiry.
+Omitting status returns both. Status is exposed
 on each inquiry; REPLIED means acceptance by this fake Support system, not
 delivery, case resolution or Product approval. Filtering precedes pagination.
-Retries do not duplicate queue transitions; reset restores OPEN inquiries.
+Retries do not duplicate queue transitions; reset restores OPEN seed inquiries.
+
+## Continuous customer conversation
+
+POST `/api/support/inquiries` with
+`{"customer_message":"Where is my order?","order_id":"ORD-DEMO-002","idempotency_key":"customer-event-1"}`.
+The order reference may be null, omitted or nonexistent; it is customer-supplied
+data, not proof of authorization. The service generates an inquiry ID and
+message ID, records its actual UTC receipt time, and returns 201.
+
+POST `/api/support/inquiries/{id}/messages` with
+`{"text":"Has it shipped yet?","idempotency_key":"customer-event-2"}`.
+History retains the original message and all replies, while inquiry lookup
+exposes the latest customer text and latest_customer_message_id. Omit order_id
+to retain the reference; explicitly supply null to clear it or a string to
+update it. GET on the same messages path returns customer and support messages
+in acceptance order with limit/offset pagination. Incoming retries deduplicate
+atomically: same key/payload returns the original 201 result, changed payload
+returns 409. New-inquiry keys are scoped to ingress; follow-up keys to the thread.
+
+For replies to an evolving conversation, include
+`in_reply_to_message_id` from the inquiry's latest_customer_message_id alongside
+text and idempotency_key. A new reply targeting an older message returns
+409/CUSTOMER_MESSAGE_CHANGED. Legacy replies without a binding remain accepted;
+use the binding to protect against a follow-up arriving during review. Replaying
+an already accepted old reply returns its original receipt without closing the
+new pending question. Use a new reply key for each new response. Changing a
+binding with a reused reply key is an idempotency conflict. Inquiry created_at
+remains its original creation time; updated_at records actual accepted activity
+(unknown for untouched seed records). No fetched_at is generated.
+
+## Source progression controls
+
+These admin endpoints let a test driver create/update fake source facts. They
+are not Product business actions and do not contact real systems. Full source
+models are shown in Swagger. Mutations persist until reset.
+
+| Method | Path | Input |
+|---|---|---|
+| POST | `/api/admin/oms/orders` | Order with client-selected source ID and timestamps |
+| PATCH | `/api/admin/oms/orders/{id}` | status and updated_at (nullable) |
+| POST | `/api/admin/oms/orders/{id}/parcels` | Parcel with matching order_id |
+| PATCH | `/api/admin/oms/parcels/{id}` | carrier, tracking_number, updated_at (nullable) |
+| POST | `/api/admin/logistics/shipments` | Shipment matching an existing assigned parcel |
+| PATCH | `/api/admin/logistics/shipments/{tracking}` | status and updated_at (nullable) |
+| POST | `/api/admin/logistics/shipments/{tracking}/events` | Event with matching parcel_id |
+| POST | `/api/admin/warehouse/orders/{id}/notes` | Note with matching order_id |
+
+Creates return 201; updates 200. Missing parents return 404, duplicate source IDs
+or conflicting associations 409. Tracking numbers cannot be shared by parcels
+or reassigned after registering a shipment. Status strings remain open; there
+is no payment/fulfillment engine. Supplied aware timestamps normalize to UTC;
+naive/numeric source timestamps are rejected, and explicit null updates remain
+unknown. Appending events does not infer current shipment status; update it
+explicitly. Shipment updates do not update OMS, and notes trigger no actions.
+Fault overrides continue to affect source reads; these controls can preload
+facts even while reads simulate unavailability. Reset removes new records and
+messages and restores the exact golden defaults.
+
+Run a complete live scenario against the running service:
+
+```sh
+uv run python scripts/live_conversation.py
+```
+
+It creates a new order and conversation, sends a reply and follow-up, checks
+stale-reply rejection, then explicitly drives parcel assignment, pickup,
+transit and delivery before the second reply. It leaves records for inspection;
+repeat runs use new IDs. Use HTTP reset when you want to clear them.
 
 Reply history accepts the same pagination parameters and returns an array in
 acceptance order with `reply_id`, `inquiry_id`, exact `text`, `idempotency_key`,
