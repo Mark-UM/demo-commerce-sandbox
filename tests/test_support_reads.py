@@ -12,18 +12,18 @@ def client(tmp_path):
 
 def test_inquiry_discovery_pagination_and_filter(client):
     path = "/api/support/inquiries"
-    result = client.get(path)
+    result = client.get(path, params={"limit": 100})
     assert result.status_code == 200
     all_rows = result.json()
     assert [row["inquiry_id"] for row in all_rows] == [
-        f"INQ-DEMO-{n:03}" for n in range(1, 13)
+        f"INQ-DEMO-{n:03}" for n in [*range(1, 13), *range(101, 149)]
     ]
     pages = [
         client.get(path, params={"limit": 5, "offset": offset}).json()
-        for offset in (0, 5, 10)
+        for offset in range(0, 60, 5)
     ]
     assert sum(pages, []) == all_rows
-    assert client.get(path, params={"offset": 12}).json() == []
+    assert client.get(path, params={"offset": 60}).json() == []
     for row in all_rows:
         assert client.get(f"{path}/{row['inquiry_id']}").json() == row
     assert client.get(path, params={"order_id": "ORD-DEMO-004"}).json() == [all_rows[3]]
@@ -63,7 +63,7 @@ def test_reply_history_preserves_exact_text_deduplicates_and_isolates(client):
         assert restarted.get(path).json() == expected
     client.app.state.store.initialize(reset=True)
     assert client.get(path).json() == []
-    assert len(client.get("/api/support/inquiries").json()) == 12
+    assert len(client.get("/api/support/inquiries", params={"limit": 100}).json()) == 60
 
 
 @pytest.mark.parametrize(

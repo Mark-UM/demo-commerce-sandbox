@@ -32,6 +32,15 @@ def snapshot(store):
 
 
 def test_explicit_time_shifts_only_known_timestamps():
+    def shifted_value(value):
+        if isinstance(value, datetime):
+            return value + (CUSTOM_TIME - BASE_TIME)
+        if isinstance(value, list):
+            return [shifted_value(item) for item in value]
+        if isinstance(value, dict):
+            return {key: shifted_value(item) for key, item in value.items()}
+        return value
+
     original = list(records())
     shifted = list(records(CUSTOM_TIME))
     assert len(original) == len(shifted)
@@ -39,10 +48,7 @@ def test_explicit_time_shifts_only_known_timestamps():
         original, shifted, strict=True
     ):
         assert (kind, key) == (new_kind, new_key)
-        expected = before.model_dump()
-        for field, value in expected.items():
-            if isinstance(value, datetime):
-                expected[field] = value + (CUSTOM_TIME - BASE_TIME)
+        expected = shifted_value(before.model_dump())
         assert after.model_dump() == expected
 
 

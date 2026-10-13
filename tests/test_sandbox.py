@@ -18,7 +18,7 @@ def test_health(client):
     assert client.get("/health").json() == {
         "status": "ok",
         "database": "ok",
-        "seed_version": "s0-s1-v1",
+        "seed_version": "sandbox-v2",
     }
 
 
@@ -198,7 +198,7 @@ def test_reset_persistence_and_timestamps(client):
             db.execute(
                 "SELECT count(*) FROM records WHERE collection='orders'"
             ).fetchone()[0]
-            == 11
+            == 120
         )
     assert (
         client.post(REPLY_PATH, json=command).json()["reply_id"] != original["reply_id"]
@@ -208,7 +208,7 @@ def test_reset_persistence_and_timestamps(client):
 
 def test_openapi_contract(client):
     document = client.get("/openapi.json").json()
-    assert len(document["paths"]) == 12
+    assert len(document["paths"]) == 15
     assert "fetched_at" not in str(document)
     order = client.get("/api/oms/orders/ORD-DEMO-002").json()
     assert set(order) == {

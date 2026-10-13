@@ -113,8 +113,34 @@ class ResetCommand(SourceModel):
 
 class ResetResult(SourceModel):
     status: Literal["RESET"]
-    seed_version: Literal["s0-s1-v1"]
+    seed_version: str
     base_time: datetime
+
+
+class PolicyFact(SourceModel):
+    code: Identifier
+    content: Identifier
+    updated_at: datetime | None
+
+
+class PolicyFacts(SourceModel):
+    facts: list[PolicyFact]
+
+
+class Summary(SourceModel):
+    seed_version: str
+    base_time: datetime
+    scenarios: int
+    customers: int
+    products: int
+    orders: int
+    parcels: int
+    shipments: int
+    shipment_events: int
+    warehouse_notes: int
+    inquiries: int
+    replies: int
+    fault_overrides: int
 
 
 class ErrorDetail(SourceModel):
@@ -135,6 +161,11 @@ FaultMode = Literal[
     "HTTP_500",
     "HTTP_429",
     "SLOW_RESPONSE",
+    "STALE_DATA",
+    "EMPTY_RESULT",
+    "PARTIAL_FAILURE",
+    "CONFLICTING_DATA",
+    "MALFORMED_RESPONSE",
 ]
 
 

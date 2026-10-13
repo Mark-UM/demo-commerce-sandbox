@@ -13,6 +13,20 @@ from pathlib import Path
 import httpx
 
 
+def wait_ready(client, process):
+    for _ in range(100):
+        if process.poll() is not None:
+            raise RuntimeError("Uvicorn exited before startup")
+        try:
+            response = client.get("/health")
+            if response.status_code == 200:
+                return response
+        except httpx.TransportError:
+            pass
+        time.sleep(0.1)
+    raise RuntimeError("Startup timed out")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Real HTTP Sandbox smoke test")
     parser.add_argument("--base-time", help="Explicit UTC reset reference time")
@@ -22,6 +36,7 @@ def main():
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
         env = {**os.environ, "SANDBOX_DB_PATH": str(Path(directory) / "smoke.sqlite3")}
+        env["SANDBOX_API_KEY"] = "smoke-test-key"
         if args.base_time:
             subprocess.run(
                 [sys.executable, "-m", "app.reset", "--base-time", args.base_time],
@@ -29,34 +44,34 @@ def main():
                 check=True,
                 timeout=15,
             )
-        process = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "uvicorn",
-                "app.main:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(port),
-            ],
-            env=env,
-        )
+        server_command = [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "app.main:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ]
+        process = subprocess.Popen(server_command, env=env)
         try:
-            with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=2) as client:
-                for _ in range(100):
-                    if process.poll() is not None:
-                        raise RuntimeError("Uvicorn exited before startup")
-                    try:
-                        response = client.get("/health")
-                        if response.status_code == 200:
-                            break
-                    except httpx.TransportError:
-                        pass
-                    time.sleep(0.1)
-                else:
-                    raise RuntimeError("Startup timed out")
+            with httpx.Client(
+                base_url=f"http://127.0.0.1:{port}",
+                timeout=2,
+                headers={"X-API-Key": "smoke-test-key"},
+            ) as client:
+                response = wait_ready(client, process)
                 assert response.json()["database"] == "ok"
+                assert client.get("/api/policy/order-support").status_code == 200
+                summary = client.get("/api/admin/summary")
+                assert summary.status_code == 200
+                assert summary.json()["orders"] == 120
+                assert summary.json()["inquiries"] == 60
+                assert (
+                    client.get("/api/oms/customers/CUS-DEMO-001/orders").status_code
+                    == 200
+                )
                 if args.base_time:
                     reference = datetime.fromisoformat(args.base_time)
                     for number, age in [
@@ -178,6 +193,20 @@ def main():
                     client.post(reply_path, json=command).json() == after_reset.json()
                 )
                 print("Reset workflow: defaults restored and new reply run verified")
+                verifier = [
+                    sys.executable,
+                    "scripts/verify_running.py",
+                    "--base-url",
+                    f"http://127.0.0.1:{port}",
+                    "--receipt-file",
+                    str(Path(directory) / "receipt.json"),
+                ]
+                subprocess.run([*verifier, "--reset"], env=env, check=True, timeout=30)
+                process.terminate()
+                process.wait(timeout=10)
+                process = subprocess.Popen(server_command, env=env)
+                wait_ready(client, process)
+                subprocess.run(verifier, env=env, check=True, timeout=30)
         finally:
             process.terminate()
             try:

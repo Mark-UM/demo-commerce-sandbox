@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.schemas import FaultCommand, Receipt, ReplyCommand
-from app.seed import BASE_TIME, records
+from app.seed import BASE_TIME, SCENARIOS, SEED_VERSION, records
 
 
 class Store:
@@ -25,6 +25,7 @@ class Store:
     def initialize(self, reset: bool = False, base_time: datetime = BASE_TIME):
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
+            db.execute("PRAGMA journal_mode=WAL")
             db.execute("BEGIN IMMEDIATE")
             db.execute("CREATE TABLE IF NOT EXISTS metadata (version TEXT NOT NULL)")
             db.execute("""CREATE TABLE IF NOT EXISTS records (
@@ -57,7 +58,71 @@ class Store:
                     "INSERT INTO records VALUES (?, ?, ?)",
                     seed_rows,
                 )
-                db.execute("INSERT INTO metadata VALUES ('s0-s1-v1')")
+                db.execute("INSERT INTO metadata VALUES (?)", (SEED_VERSION,))
+
+    def customer_exists(self, customer_id: str):
+        with self.connect() as db:
+            return (
+                db.execute(
+                    "SELECT 1 FROM records WHERE collection='orders' "
+                    "AND json_extract(payload, '$.customer_reference')=? LIMIT 1",
+                    (customer_id,),
+                ).fetchone()
+                is not None
+            )
+
+    def customer_orders(self, customer_id: str, limit: int, offset: int):
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT payload FROM records WHERE collection='orders' "
+                "AND json_extract(payload, '$.customer_reference')=? "
+                "ORDER BY lookup_key LIMIT ? OFFSET ?",
+                (customer_id, limit, offset),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
+    def summary(self):
+        with self.connect() as db:
+            db.execute("BEGIN")  # One consistent snapshot during concurrent writes.
+            counts = dict(
+                db.execute(
+                    "SELECT collection, count(*) FROM records GROUP BY collection"
+                ).fetchall()
+            )
+            customers = db.execute(
+                "SELECT count(DISTINCT json_extract(payload, '$.customer_reference')) "
+                "FROM records WHERE collection='orders'"
+            ).fetchone()[0]
+            products = db.execute(
+                "SELECT count(DISTINCT json_extract(item.value, '$.sku')) "
+                "FROM records, json_each(records.payload, '$.items') AS item "
+                "WHERE records.collection='orders'"
+            ).fetchone()[0]
+            reference = json.loads(
+                db.execute(
+                    "SELECT payload FROM records WHERE collection='inquiries' "
+                    "AND lookup_key='INQ-DEMO-001'"
+                ).fetchone()[0]
+            )["created_at"]
+            return {
+                "seed_version": db.execute("SELECT version FROM metadata").fetchone()[
+                    0
+                ],
+                "base_time": reference,
+                "scenarios": len(SCENARIOS),
+                "customers": customers,
+                "products": products,
+                "orders": counts.get("orders", 0),
+                "parcels": counts.get("parcels", 0),
+                "shipments": counts.get("shipments", 0),
+                "shipment_events": counts.get("events", 0),
+                "warehouse_notes": counts.get("notes", 0),
+                "inquiries": counts.get("inquiries", 0),
+                "replies": db.execute("SELECT count(*) FROM replies").fetchone()[0],
+                "fault_overrides": db.execute("SELECT count(*) FROM faults").fetchone()[
+                    0
+                ],
+            }
 
     def get(self, collection: str, key: str):
         with self.connect() as db:
@@ -157,7 +222,6 @@ class Store:
         # Consume a one-shot failure atomically even across concurrent workers.
         # Commit before any HTTP error/delay, so locks never span response delays.
         with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 "SELECT mode, delay_ms, remaining_failures FROM faults "
                 "WHERE system=? AND record_id=?",
@@ -165,6 +229,15 @@ class Store:
             ).fetchone()
             if row is None:
                 return None
+            if row[0] == "TIMEOUT_ONCE":
+                db.execute("BEGIN IMMEDIATE")
+                row = db.execute(
+                    "SELECT mode, delay_ms, remaining_failures FROM faults "
+                    "WHERE system=? AND record_id=?",
+                    (system, record_id),
+                ).fetchone()
+                if row is None:
+                    return None
             mode, delay, remaining = row
             if mode == "TIMEOUT_ONCE":
                 if remaining == 0:

@@ -1,9 +1,24 @@
-from fastapi import APIRouter, Request
+from typing import Annotated
 
-from app.errors import require, store
+from fastapi import APIRouter, Query, Request
+
+from app.errors import SourceError, require, store
 from app.schemas import Order, Parcel
 
 router = APIRouter(prefix="/api/oms", tags=["OMS"])
+
+
+@router.get("/customers/{customer_id}/orders", response_model=list[Order])
+def customer_orders(
+    customer_id: str,
+    request: Request,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    database = store(request)
+    if not database.customer_exists(customer_id):
+        raise SourceError(404, "CUSTOMER_NOT_FOUND", "Customer was not found")
+    return database.customer_orders(customer_id, limit, offset)
 
 
 @router.get("/orders/{order_id}", response_model=Order)

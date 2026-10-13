@@ -39,7 +39,7 @@ def test_running_service_reset_restores_defaults_and_starts_new_reply_run(client
     assert response.status_code == 200
     assert response.json() == {
         "status": "RESET",
-        "seed_version": "s0-s1-v1",
+        "seed_version": "sandbox-v2",
         "base_time": "2026-09-20T06:00:00Z",
     }
     assert client.get("/health").json()["status"] == "ok"
@@ -129,4 +129,4 @@ def test_failed_seed_insertion_rolls_back_reset(client, monkeypatch):
             client.post("/api/admin/reset", json={})
     assert client.get("/api/admin/scenarios").json() == faults
     assert client.get(REPLY_PATH).json()[0]["reply_id"] == receipt["reply_id"]
-    assert len(client.get("/api/support/inquiries").json()) == 12
+    assert len(client.get("/api/support/inquiries", params={"limit": 100}).json()) == 60

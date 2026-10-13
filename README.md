@@ -5,11 +5,11 @@ Assistant, which lives in another repository. This is **not the AI product**.
 It provides deterministic source data and realistic, independent HTTP failures.
 The Product must use HTTP; it must not import this code or access this database.
 
-One FastAPI service represents OMS, Logistics, Warehouse, and Support through
+One FastAPI service represents OMS, Logistics, Warehouse, Support and Policy through
 separate routers. SQLite persists seed records and accepted simulated replies.
-No AI, UI, authentication, real providers, SaaS, or cross-system aggregation is included.
-S0-S1 is the baseline; core increments add independent HTTP fault controls and
-Support discovery/history for integration entirely over HTTP.
+The complete environment includes deterministic ordinary data, golden scenarios,
+service API Key authentication, HTTP fault controls, reply history, reset and
+container deployment. No AI, UI, real providers, SaaS, or cross-system aggregation.
 
 ## Start independently
 
@@ -26,6 +26,28 @@ Open http://127.0.0.1:9000/docs for the generated API schemas.
 Set this environment variable in your shell; `.env.example` is a reference and
 is not loaded automatically. No other services or accounts are required.
 
+All `/api/*` routes require `X-API-Key: demo-commerce-key` by default. Set
+`SANDBOX_API_KEY` to select another key; an explicit empty value disables
+authentication for isolated tests. Missing credentials return 401, wrong keys
+403. Health, docs and OpenAPI remain public; Swagger's Authorize button supplies
+the key. This service credential does not grant Product customer authorization.
+
+Container startup (Docker Engine required):
+
+```sh
+docker compose up --build -d --wait
+```
+
+Compose binds localhost:9000 and persists SQLite in the `sandbox-data` volume.
+The container uses Python 3.12, locked dependencies and a non-root process.
+`docker compose restart` or `docker compose down` preserves data. HTTP reset
+starts a new test run. `docker compose down -v` deletes the persistent volume.
+Compose reads `.env` if present; the Python application reads shell environment.
+
+Existing `s0-s1-v1` databases are preserved at startup. Explicit HTTP or CLI
+reset upgrades them to the complete `sandbox-v2` seed and deletes old replies
+and overrides. Before that reset, old datasets may lack the Policy record.
+
 ## API surface
 
 | Method | Path | Source behavior |
@@ -33,6 +55,7 @@ is not loaded automatically. No other services or accounts are required.
 | GET | `/health` | Database and seed health |
 | GET | `/api/oms/orders/{order_id}` | Order and items |
 | GET | `/api/oms/orders/{order_id}/parcels` | All OMS parcel references |
+| GET | `/api/oms/customers/{customer_id}/orders` | Paginated customer orders |
 | GET | `/api/logistics/shipments/{tracking_number}` | Source shipment status |
 | GET | `/api/logistics/shipments/{tracking_number}/events` | Source tracking events |
 | GET | `/api/warehouse/orders/{order_id}/notes` | Original free-text notes |
@@ -44,6 +67,8 @@ is not loaded automatically. No other services or accounts are required.
 | PUT | `/api/admin/scenarios/{system}/{record_id}` | Set or replace a fault override |
 | DELETE | `/api/admin/scenarios/{system}/{record_id}` | Restore golden behavior |
 | POST | `/api/admin/reset` | Restore deterministic data and start a new test run |
+| GET | `/api/admin/summary` | Stored record counts, seed version and reference time |
+| GET | `/api/policy/order-support` | Static source policy facts |
 
 Reply body: `{"text":"Your parcel is in transit.","idempotency_key":"reviewed-reply-1"}`.
 Success is HTTP 200 with `reply_id`, `status: SENT`, and `sent_at`. SENT records
@@ -66,7 +91,7 @@ not Product case states. Restart preserves history and reset removes it.
 For an HTTP-only test run, keep the service running and POST `/api/admin/reset`
 with `{}` to restore the default seed, or
 `{"base_time":"2026-10-13T06:00:00Z"}` to choose an explicit UTC reference.
-The response is `{"status":"RESET","seed_version":"s0-s1-v1","base_time":"..."}`.
+The response is `{"status":"RESET","seed_version":"sandbox-v2","base_time":"..."}`.
 Reset atomically replaces source data, clears replies/deduplication history and
 fault overrides, and restores the golden S08/S09 failures. Invalid payloads
 return 422 without changing data. A failed reset rolls back the whole transaction.
@@ -110,13 +135,23 @@ The inquiry `created_at` exposes T0 over HTTP so test clients can inspect it.
 Exactly S01-S12 are defined: unshipped, in transit, delivered, two parcels,
 waiting restock, planned shipment/uncollected, stale logistics, logistics 504,
 warehouse 503, missing logistics, conflicting sources, and nonexistent order.
-There are 11 real orders and 12 inquiries; S12 references an absent order.
+Golden scenarios contain 11 real orders and 12 inquiries; S12 references an
+absent order. Ordinary IDs ORD-DEMO-101 through ORD-DEMO-209 add 109 orders.
+The complete seed has 120 orders, 60 customer references, 20 SKUs, 142 parcels,
+141 shipments, 543 tracking events, 120 warehouse notes and 60 inquiries.
+All relations and quantities are deterministic; no random generator or clock
+read is needed. ORD-DEMO-105 supplies instruction-like warehouse text as plain
+source data; INQ-DEMO-106 supplies a refund inquiry. Neither triggers actions.
 See [scenario details](docs/scenarios.md) and [HTTP contract](docs/api-contract.md).
+See [implementation and verification status](docs/implementation-status.md)
+for completed scope, current limitations and the Product repository boundary.
 
 The supplied root reference documents are copied unchanged into `docs/reference/`.
 The supplied plan is named `03_ecommerce_environment_build_plan.md`, rather than
 the `03_ecommerce_environment_plan.md` name mentioned in the request.
-The current request overrides their broader future scope and older scenario IDs.
+The current implementation retains the revised golden IDs and `/api` contracts
+while fulfilling the broader Sandbox environment scope. Product adapters and
+Product end-to-end validation remain in the separate Product repository.
 
 ## Verification
 
@@ -126,6 +161,21 @@ uv run ruff check .
 uv run ruff format --check .
 uv run python scripts/smoke.py
 ```
+
+Verify an already running local/container service (this sends a test reply):
+
+```sh
+uv run python scripts/verify_running.py --reset --receipt-file receipt.json
+docker compose restart
+uv run python scripts/verify_running.py --receipt-file receipt.json
+```
+
+Set SANDBOX_API_KEY in the verifier's environment to match the server.
+`--reset` intentionally clears the previous test run; omit it to preserve data.
+The receipt file checks that restart preserved the exact receipt and consumed
+one-shot fault budget. The script leaves its simulated reply and override in
+the environment for inspection. Reset clears them. GitHub Actions runs tests,
+lint, HTTP checks, container build and restart verification on pushes/PRs.
 
 The smoke script starts a separate Uvicorn process with a temporary SQLite file,
 uses real HTTP for health and S02/S04/S06/S08/S09/S12, then verifies the inquiry,
@@ -159,6 +209,11 @@ second parcel, OMS, Warehouse, and Support remain independently available.
 | HTTP_500 | Each request returns 500 |
 | HTTP_429 | Each request returns 429 with Retry-After: 1 |
 | SLOW_RESPONSE | Delay each response by required delay_ms (1–10000), then return source data |
+| STALE_DATA | Shift known source timestamps back 72 hours, preserving nulls |
+| EMPTY_RESULT | Empty events/notes; shipment retains identity with null status/update |
+| PARTIAL_FAILURE | This source record returns 503; other parcels remain independent |
+| CONFLICTING_DATA | Warehouse says not handed over; logistics reports PICKED_UP |
+| MALFORMED_RESPONSE | HTTP 200 with deliberately invalid JSON for adapter robustness tests |
 
 For an actual client timeout, PUT `{"mode":"SLOW_RESPONSE","delay_ms":2000}`
 and use a client timeout below two seconds. This differs from an immediate 504.

@@ -1,4 +1,4 @@
-# S0-S1 source HTTP contract
+# DemoCommerce source HTTP contract
 
 The Pydantic models in `app/schemas.py` and generated `/openapi.json` define the
 concrete schema. These are raw source payloads, not canonical Product snapshots.
@@ -17,6 +17,7 @@ from event ordering. Status strings remain open rather than a universal enum.
 | Note | note_id, order_id, text, created_at, updated_at (nullable) |
 | Inquiry | inquiry_id, order_id (nullable), customer_message, created_at |
 | Reply receipt | reply_id, status (SENT), sent_at |
+| Policy fact | code, content, updated_at (nullable); envelope has facts array |
 
 Source identity comes from the subsystem URL: demo_oms, demo_logistics,
 demo_warehouse, or demo_support. IDs identify records within those sources.
@@ -50,7 +51,8 @@ GET `/api/admin/scenarios` lists explicit overrides. PUT
 `/api/admin/scenarios/{system}/{record_id}` accepts `mode` and optional
 `delay_ms` (default 0). Supported systems are logistics (tracking number) and
 warehouse (order ID); nonexistent targets return 404. Modes are NORMAL,
-TIMEOUT_ONCE, ALWAYS_TIMEOUT, HTTP_500, HTTP_429 and SLOW_RESPONSE.
+TIMEOUT_ONCE, ALWAYS_TIMEOUT, HTTP_500, HTTP_429, SLOW_RESPONSE, STALE_DATA,
+EMPTY_RESULT, PARTIAL_FAILURE, CONFLICTING_DATA and MALFORMED_RESPONSE.
 SLOW_RESPONSE requires delay_ms from 1 to 10000; other modes require 0.
 Unknown fields, invalid systems/modes and invalid delays return 422.
 
@@ -67,7 +69,28 @@ Rules and consumed budgets persist across service restarts. PUT replaces a rule
 and resets its budget. DELETE on the same path returns 204, including when no
 override exists, and restores the golden default. NORMAL suppresses default
 faults. Reset clears overrides. GET reports only explicit overrides. These
-controls never aggregate sources, create business facts, or implement retries.
+controls never aggregate sources or implement retries. STALE_DATA shifts each
+known source timestamp back 72 hours, preserving nulls. EMPTY_RESULT returns
+empty event/note lists or a shipment with null status/update and unchanged
+identity. PARTIAL_FAILURE makes the targeted record unavailable with 503;
+other parcels are queried independently, without 207 or a partial envelope.
+CONFLICTING_DATA supplies warehouse text saying not handed to the carrier or
+logistics status PICKED_UP. MALFORMED_RESPONSE intentionally bypasses schema
+validation to send incomplete JSON with HTTP 200. These overrides affect only
+the response; DELETE restores the stored source payload.
+
+All `/api` routes require X-API-Key by default (demo-commerce-key); configure
+SANDBOX_API_KEY to change it or explicitly empty to disable for isolated tests.
+Missing key is 401/UNAUTHORIZED; wrong key is 403/FORBIDDEN. Authentication runs
+before fault consumption or mutations. Health/docs/OpenAPI are public.
+GET `/api/policy/order-support` returns two static facts, updated at T0 minus
+five days. GET `/api/oms/customers/{customer_id}/orders` returns source orders
+in ID order with limit/offset pagination; unknown customer is 404, offset past
+the end is []. GET `/api/admin/summary` provides one consistent database snapshot
+of record counts, customer/SKU counts, golden scenario count, seed version,
+reference time, accepted replies and explicit fault overrides. It is inventory
+metadata, not an order context. Unexpected internal errors use the same error
+envelope with INTERNAL_ERROR and do not expose exception content.
 
 ## Resolved differences from reference documents
 
@@ -75,7 +98,7 @@ POST `/api/admin/reset` takes an explicit JSON object. `{}` or
 `{"base_time":null}` selects the default T0; a `base_time` string selects an
 ISO 8601 UTC reference (Z or +00:00). Naive/non-UTC timestamps, timestamps too
 early for the five-day seed offset, numeric timestamps and unknown fields are
-422. The response has `status: RESET`, `seed_version: s0-s1-v1`, and the chosen
+422. The response has `status: RESET`, `seed_version: sandbox-v2`, and the chosen
 UTC `base_time`. Source records, reply/deduplication history, and fault overrides
 are reset in one transaction; validation or transaction failure preserves the
 previous run. The service remains running. Finish old requests before reset,
@@ -101,10 +124,12 @@ and single-inquiry schemas are unchanged.
 - OMS lists parcels, then the Product retrieves each shipment and event list.
   There is no aggregate order context, HTTP 207, or cross-system partial envelope.
 - The current 12 scenario definitions replace the plan's older scenario mapping.
-- S12 has an inquiry but deliberately no order; only 11 order records exist.
+- S12 has an inquiry but deliberately no order. There are 11 golden orders plus
+  109 ordinary orders, for a total of 120; golden record identities are unchanged.
 - An explicit fixed reference time replaces implicit current reset time for
   exact reproducibility. The default reproduces the original source records.
 - No fetched_at is fabricated; null updates remain unknown.
-- S0-S1 introduced no API key, policy API, admin API, or random records. The next
-  authorized core increments add fault controls, Support source reads and HTTP
-  reset. Offline CLI reset is still available with the service stopped.
+- Full implementation adds API Key, Policy, inventory summary, source customer
+  lookup and deterministic ordinary records. Offline CLI reset remains available.
+- Existing seed versions are not silently replaced at startup; an explicit
+  reset installs sandbox-v2 and clears the previous run.

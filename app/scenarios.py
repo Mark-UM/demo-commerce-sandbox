@@ -1,4 +1,8 @@
+import logging
 import time
+from datetime import datetime, timedelta
+
+from fastapi import Response
 
 from app.database import Store
 from app.errors import SourceError
@@ -21,6 +25,9 @@ FAILURES = {
 def apply_failure(database: Store, system: str, key: str):
     if override := database.take_fault(system, key):
         mode, delay = override
+        logging.getLogger("uvicorn.error").info(
+            "scenario system=%s record=%s mode=%s", system, key, mode
+        )
         if mode == "SLOW_RESPONSE":
             # Routers are synchronous: delay occupies a worker, not the event loop.
             time.sleep(delay / 1000)
@@ -41,6 +48,39 @@ def apply_failure(database: Store, system: str, key: str):
                 f"Demo {system} rate limit",
                 headers={"Retry-After": "1"},
             )
-        return
+        elif mode == "PARTIAL_FAILURE":
+            raise SourceError(
+                503, "SCENARIO_FORCED_FAILURE", f"Demo {system} record unavailable"
+            )
+        return mode
     if failure := FAILURES.get((system, key)):
         raise SourceError(*failure)
+
+
+def source_payload(mode: str | None, data, system: str):
+    """Alter only this source response, never canonical snapshots or other systems."""
+    if mode == "MALFORMED_RESPONSE":
+        return Response(content='{"incomplete":', media_type="application/json")
+    if mode == "EMPTY_RESULT":
+        if isinstance(data, list):
+            return []
+        return {**data, "status": None, "updated_at": None}
+    rows = data if isinstance(data, list) else [data]
+    if mode == "STALE_DATA":
+        for row in rows:
+            for field in ("updated_at", "created_at", "occurred_at"):
+                if row.get(field) is not None:
+                    row[field] = (
+                        (datetime.fromisoformat(row[field]) - timedelta(hours=72))
+                        .isoformat()
+                        .replace("+00:00", "Z")
+                    )
+    elif mode == "CONFLICTING_DATA":
+        for row in rows:
+            if system == "warehouse":
+                row["text"] = "Parcel has not been handed to the carrier today."
+            else:
+                row["status"] = "PICKED_UP"
+                if "description" in row:
+                    row["description"] = "Collected by carrier."
+    return data

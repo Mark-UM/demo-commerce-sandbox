@@ -1,10 +1,22 @@
 from fastapi import APIRouter, Request, Response
 
 from app.errors import require, store
-from app.schemas import FaultCommand, FaultState, FaultSystem, ResetCommand, ResetResult
-from app.seed import BASE_TIME
+from app.schemas import (
+    FaultCommand,
+    FaultState,
+    FaultSystem,
+    ResetCommand,
+    ResetResult,
+    Summary,
+)
+from app.seed import BASE_TIME, SEED_VERSION
 
 router = APIRouter(prefix="/api/admin", tags=["Scenario controls"])
+
+
+@router.get("/summary", response_model=Summary)
+def summary(request: Request):
+    return store(request).summary()
 
 
 @router.get("/scenarios", response_model=list[FaultState])
@@ -35,4 +47,4 @@ def clear(system: FaultSystem, record_id: str, request: Request):
 def reset(command: ResetCommand, request: Request):
     reference = command.base_time or BASE_TIME
     store(request).initialize(reset=True, base_time=reference)
-    return ResetResult(status="RESET", seed_version="s0-s1-v1", base_time=reference)
+    return ResetResult(status="RESET", seed_version=SEED_VERSION, base_time=reference)

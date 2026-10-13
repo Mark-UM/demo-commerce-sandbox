@@ -9,6 +9,8 @@
 - Preserve source timestamps and nulls; never generate fetched_at or freshness.
 - Every behavior change requires tests. Run pytest, ruff check, ruff format --check,
   and a real application startup smoke test.
-- S0-S1 is the baseline. Authorized increments add independent HTTP fault
-  controls, HTTP reset and Support inquiry/reply reads for HTTP-only integration, as
-  documented in README and the API contract.
+- Full Sandbox implementation includes 120 deterministic orders, the unchanged
+  S01-S12 scenarios, source read/reply APIs, Policy facts, independent fault
+  controls, HTTP reset, API Key service authentication and container deployment.
+- Do not build Product adapters, freshness rules, authorization workflows, AI
+  answers, or real ecommerce integrations. Keep the single-service design.

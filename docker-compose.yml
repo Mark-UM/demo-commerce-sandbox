@@ -1,0 +1,14 @@
+services:
+  sandbox-api:
+    build: .
+    ports:
+      - "127.0.0.1:9000:9000"
+    environment:
+      SANDBOX_DB_PATH: /data/sandbox.sqlite3
+      SANDBOX_API_KEY: ${SANDBOX_API_KEY:-demo-commerce-key}
+    volumes:
+      - sandbox-data:/data
+    restart: unless-stopped
+
+volumes:
+  sandbox-data:
