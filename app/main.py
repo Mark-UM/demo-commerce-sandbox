@@ -2,11 +2,13 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 
 from app.database import Store
@@ -25,6 +27,13 @@ def create_app(db_path: str | None = None, api_key: str | None = None) -> FastAP
         yield
 
     app = FastAPI(title="DemoCommerce Sandbox", version="0.1.0", lifespan=lifespan)
+    static = Path(__file__).parent / "static"
+    app.mount("/static", StaticFiles(directory=static), name="static")
+
+    @app.get("/", include_in_schema=False)
+    def console():
+        return FileResponse(static / "index.html")
+
     app.state.store = database
     app.state.api_key = (
         os.getenv("SANDBOX_API_KEY", "demo-commerce-key")

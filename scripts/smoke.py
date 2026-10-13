@@ -63,6 +63,11 @@ def main():
             ) as client:
                 response = wait_ready(client, process)
                 assert response.json()["database"] == "ok"
+                console = client.get("/")
+                assert console.status_code == 200
+                assert "DemoCommerce" in console.text
+                assert client.get("/static/console.js").status_code == 200
+                assert client.get("/static/console.css").status_code == 200
                 assert client.get("/api/policy/order-support").status_code == 200
                 summary = client.get("/api/admin/summary")
                 assert summary.status_code == 200

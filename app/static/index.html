@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DemoCommerce · Sandbox 控制台</title>
+  <link rel="stylesheet" href="/static/console.css">
+  <script src="/static/console.js" defer></script>
+</head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="/">D<span>DemoCommerce<small>EXTERNAL SYSTEM SANDBOX</small></span></a>
+  <nav aria-label="主导航">
+    <button class="nav active" data-view="sources">◈ <span>场景与源数据</span></button>
+    <button class="nav" data-view="support">▤ <span>客户会话</span></button>
+    <button class="nav" data-view="faults">⌁ <span>故障控制</span></button>
+    <button class="nav" data-view="simulation">↗ <span>模拟数据推进</span></button>
+  </nav>
+  <div class="sidebar-bottom"><span class="pill">TEST ENVIRONMENT</span><p>独立来源 · 真实 HTTP 行为<br>所有数据与回复均为模拟</p><a href="/docs" target="_blank" rel="noopener">打开 API 文档 ↗</a></div>
+</aside>
+<main>
+  <header><div><span class="eyebrow">WORKSPACE / SANDBOX</span><h1 id="page-title">场景与源数据</h1></div><span id="connection" class="pill">未连接</span></header>
+  <section class="connection panel"><form id="connect-form"><label>API Key<input id="api-key" type="password" value="demo-commerce-key" autocomplete="off" aria-label="API Key"></label><button type="submit">连接 / 刷新</button></form><p>使用本服务的 HTTP 接口。密钥仅保存在当前页面内存中。</p></section>
+  <div id="notice" role="status" aria-live="polite" hidden></div>
+  <section id="metrics" class="metrics" aria-label="环境统计"></section>
+  <p id="base-time" class="muted"></p>
+  <section id="view-sources" class="view">
+    <div class="section-heading"><div><h2>从一个场景开始</h2><p>逐个读取 OMS、物流与仓库，保留各接口的成功、失败与空值。</p></div></div>
+    <div id="scenarios" class="scenarios"></div>
+    <form id="inspect-form" class="toolbar panel"><label>订单 ID<input id="order-id" value="ORD-DEMO-002" required></label><button>检查源数据</button><button id="open-scenario-inquiry" type="button" class="secondary">查看场景会话</button></form>
+    <div id="source-results" class="source-grid" aria-live="polite"></div>
+    <details class="panel policy"><summary>通过客户 ID 查找订单</summary><form id="customer-form" class="toolbar"><label>客户 ID<input id="customer-id" value="CUS-DEMO-002" required></label><button>查找订单</button></form><div id="customer-orders"></div><div class="pager"><button id="prev-orders" class="secondary" disabled>上一页</button><span id="orders-page"></span><button id="next-orders" class="secondary" disabled>下一页</button></div></details>
+    <details class="panel policy"><summary>查看 Policy 原始事实</summary><div id="policy-result"></div></details>
+  </section>
+  <section id="view-support" class="view" hidden>
+    <div class="section-heading"><div><h2>客户消息与模拟回复</h2><p>新消息会重新打开会话；回复绑定当前客户消息，避免覆盖后续追问。</p></div></div>
+    <div class="support-grid">
+      <div class="panel"><form id="inquiry-filter" class="stack"><label>状态<select id="inquiry-status"><option value="OPEN">待回复</option><option value="REPLIED">已回复</option><option value="">全部</option></select></label><label>订单筛选<input id="inquiry-order" placeholder="可选：ORD-DEMO-002"></label><button>刷新会话列表</button></form><div id="inquiries" class="inquiries"></div><div class="pager"><button id="prev-inquiries" class="secondary">上一页</button><span id="inquiry-page"></span><button id="next-inquiries" class="secondary">下一页</button></div><details><summary>新建客户询问</summary><form id="new-inquiry" class="stack"><label>订单 ID（可空）<input name="order_id"></label><label>客户消息<textarea name="text" required maxlength="10000"></textarea></label><button>接收客户询问</button><div class="operation-result" aria-live="polite"></div></form></details></div>
+      <div class="panel conversation"><form id="open-inquiry" class="toolbar"><label>会话 ID<input id="inquiry-id" placeholder="INQ-DEMO-002" required></label><button>打开</button></form><div id="thread-info" class="muted">选择会话以查看消息。</div><div id="messages" class="messages"></div><button id="more-messages" class="secondary" hidden>加载更早之后的消息</button><form id="send-message" class="stack"><label>操作类型<select name="kind"><option value="reply">发送模拟客服回复</option><option value="followup">接收客户追问</option></select></label><label>消息内容<textarea name="text" required maxlength="10000" placeholder="手动输入测试消息，不会自动生成答案"></textarea></label><div id="followup-reference" hidden><label>客户追问的订单关联<select name="reference"><option value="keep">保留当前订单</option><option value="clear">清除订单关联</option><option value="set">改为下方订单</option></select></label><label>新的订单 ID<input name="order_id" placeholder="新的订单 ID"></label></div><button disabled id="send-button">提交消息</button><div class="operation-result" aria-live="polite"></div></form></div>
+    </div>
+  </section>
+  <section id="view-faults" class="view" hidden>
+    <div class="section-heading"><div><h2>让每个来源独立失败</h2><p>物流控制使用运单号，仓库控制使用订单号。NORMAL 覆盖内置故障，移除覆盖则恢复原始场景。</p></div><button id="refresh-faults" class="secondary">刷新覆盖</button></div>
+    <div class="two-columns"><form id="fault-form" class="panel stack"><label>来源<select name="system"><option value="logistics">Logistics 物流</option><option value="warehouse">Warehouse 仓库</option></select></label><label>来源记录 ID<input name="record_id" value="TRK-DEMO-008-1" required></label><label>故障模式<select name="mode" id="fault-mode"></select></label><p id="fault-description" class="muted"></p><label>响应延迟（毫秒，仅 SLOW_RESPONSE）<input name="delay_ms" type="number" min="0" max="10000" value="0" disabled></label><div class="actions"><button>应用覆盖</button><button type="button" id="clear-fault" class="secondary">移除覆盖</button></div><div class="operation-result" aria-live="polite"></div></form><div class="panel"><h3>当前显式覆盖</h3><div id="fault-list"></div></div></div>
+  </section>
+  <section id="view-simulation" class="view" hidden>
+    <div class="section-heading"><div><h2>推进单个来源的数据</h2><p>写入不会自动更新其他系统。先填入来源真实时间；null 会原样保留。</p></div></div>
+    <div class="two-columns"><form id="simulation-form" class="panel stack"><label>操作<select id="source-operation"></select></label><label id="source-target-label">目标记录 ID<input id="source-target"></label><label>请求 JSON<textarea id="source-payload" class="code-input" rows="14" spellcheck="false" required></textarea></label><p id="source-endpoint" class="muted"></p><button>执行来源写入</button><div class="operation-result" aria-live="polite"></div></form><div class="panel"><h3>写入结果</h3><div id="simulation-result" class="muted">选择操作后可以编辑完整请求。所有校验与冲突由来源 API 处理。</div></div></div>
+    <details class="panel danger-zone"><summary>重置整个测试环境</summary><p>将清除所有模拟写入、客户追问、回复与故障覆盖，恢复 120 个基准订单。请先完成正在进行的请求。</p><form id="reset-form" class="stack"><label>基准时间<select name="clock"><option value="baseline">固定基准：2026-09-20 06:00 UTC</option><option value="now">使用当前 UTC 时间</option></select></label><label class="check"><input type="checkbox" required> 我确认清除当前测试数据</label><button class="danger">重置环境</button><div class="operation-result" aria-live="polite"></div></form></details>
+  </section>
+  <footer>DemoCommerce Sandbox · OMS / Logistics / Warehouse / Support / Policy</footer>
+</main>
+</body>
+</html>

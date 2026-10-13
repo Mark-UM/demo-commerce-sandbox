@@ -1,7 +1,9 @@
 # Sandbox boundaries
 
 - Build only a fake external ecommerce environment, never AI features.
-- No generic SaaS, microservices, UI, or product business logic.
+- No generic SaaS, microservices, or product business logic. The user-authorized
+  Sandbox console may inspect and control fake sources through the existing HTTP
+  APIs; never add Product workflows or AI features to this console.
 - Never aggregate systems into a Product context or implement Product adapters.
 - The Product accesses this service only through HTTP.
 - Preserve S01-S12 scenario IDs and their stable source IDs.

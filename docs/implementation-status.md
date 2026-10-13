@@ -23,10 +23,11 @@ HTTP authority.
 | Persistence | SQLite WAL; restarts retain replies, overrides and consumed budgets |
 | Deployment | Non-root Python 3.12 image, locked dependencies, healthcheck, Compose volume |
 | Automation | GitHub Actions for unit/lint/HTTP/container/restart checks |
+| Sandbox console | Responsive source inspection, customer order lookup, conversations, faults, source writes and confirmed reset through existing HTTP APIs |
 
 ## Verification on 2026-10-13
 
-- Python 3.13: 123 tests passed. Two third-party deprecation warnings remain.
+- Python 3.13: 125 tests passed. Two third-party deprecation warnings remain.
 - Ruff lint and format checks passed; diff whitespace check passed.
 - Real Uvicorn HTTP smoke passed, including normal/golden failures, authentication,
   Policy, complete inventory, source reads, reply deduplication, actual client
@@ -70,8 +71,18 @@ Ordinary records use deterministic index arithmetic rather than randomness.
 Time uses an explicit reference instead of reset's current clock. Customer and
 SKU records are source references embedded in orders, without a separate CRM or
 catalog service. Authentication is one service key, not a user-permission system.
-Random normal latency, a UI, real provider integrations and unrelated commerce
+Random normal latency, real provider integrations and unrelated commerce
 operations are outside this environment's purpose.
+The user subsequently authorized a lightweight Sandbox control console. It
+serves static assets from `/`, keeps the API credential in page memory, and
+operates the existing independent HTTP sources. It includes no Product logic.
+Browser acceptance covers split parcels, independent 504 responses, NORMAL
+recovery, malformed JSON, message reply/follow-up, stale-message 409 with draft
+preservation, new unbound inquiries and all eight source write operations.
+Confirmed reset restores the baseline inventory; an invalid console API Key
+returns a visible 403. Customer lookup and mobile layouts were checked in the
+browser; source, conversation and simulation views have no horizontal overflow
+at the 390-pixel viewport. No browser script errors were recorded.
 
 Existing databases are never silently reseeded; explicit reset upgrades to
 `sandbox-v2` and intentionally clears the previous run. Finish previous-run

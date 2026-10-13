@@ -9,7 +9,8 @@ One FastAPI service represents OMS, Logistics, Warehouse, Support and Policy thr
 separate routers. SQLite persists seed records and accepted simulated replies.
 The complete environment includes deterministic ordinary data, golden scenarios,
 service API Key authentication, HTTP fault controls, reply history, reset and
-container deployment. No AI, UI, real providers, SaaS, or cross-system aggregation.
+container deployment. A lightweight Sandbox console operates these HTTP APIs.
+No AI, real providers, SaaS, or cross-system aggregation.
 
 ## Start independently
 
@@ -21,7 +22,15 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 9000
 ```
 
 First startup seeds an empty database; later startups preserve replies.
-Open http://127.0.0.1:9000/docs for the generated API schemas.
+Open http://127.0.0.1:9000/ for the Sandbox console, or
+http://127.0.0.1:9000/docs for the generated API schemas.
+The console supports S01–S12 inspection, independent source retries, paginated
+customer conversations, idempotent inquiry/follow-up/reply submission, all fault
+modes, all eight source simulation operations and explicitly confirmed reset.
+Replies bind to the latest customer message; a concurrent follow-up returns a
+conflict and refreshes the conversation. Source text is displayed as data.
+The API Key stays in page memory; enter the configured key when it differs from
+the demo default. The console is a fake-source test tool, not the AI Product.
 `SANDBOX_DB_PATH` optionally selects a SQLite file (default `./sandbox.sqlite3`).
 Set this environment variable in your shell; `.env.example` is a reference and
 is not loaded automatically. No other services or accounts are required.
