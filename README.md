@@ -1,5 +1,8 @@
 # DemoCommerce Sandbox
 
+中文使用入口：[完整操作手册](docs/user-guide.zh-CN.md)，包含前端全部功能、
+八类来源写入、故障模式、会话与幂等、重置、HTTP 示例和常见问题。
+
 A fake ecommerce company environment for testing the Ecommerce Order Support
 Assistant, which lives in another repository. This is **not the AI product**.
 It provides deterministic source data and realistic, independent HTTP failures.
